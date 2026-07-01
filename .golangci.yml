@@ -1,0 +1,57 @@
+version: "2"
+
+run:
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    - depguard
+    - misspell
+    - revive
+    - unconvert
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    depguard:
+      rules:
+        # The domain layer is pure: stdlib and other domain packages only.
+        domain-pure:
+          files:
+            - "**/internal/domain/**"
+          allow:
+            - $gostd
+            - github.com/kurnhyalcantara/araquanid/internal/domain
+        # Usecases never see transport types or infrastructure drivers;
+        # they consume ports (repository interfaces, locally defined
+        # interfaces injected from the container).
+        usecase-clean:
+          files:
+            - "**/internal/usecase/**"
+          deny:
+            - pkg: github.com/kurnhyalcantara/probopass/gen
+              desc: usecase must not depend on transport types; map in handler/mapper
+            - pkg: github.com/kurnhyalcantara/kingler/pkg/platform
+              desc: usecase must not depend on infrastructure; define the port where it is consumed
+            - pkg: github.com/kurnhyalcantara/araquanid/internal/handler
+              desc: usecase must not depend on the handler (delivery) layer
+            - pkg: google.golang.org/grpc
+              desc: usecase must not depend on transport
+            - pkg: github.com/jackc/pgx
+              desc: usecase must not depend on database drivers
+            - pkg: github.com/redis/go-redis
+              desc: usecase must not depend on database drivers
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/kurnhyalcantara/araquanid
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

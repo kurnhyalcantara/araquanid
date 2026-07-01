@@ -1,0 +1,15 @@
+{
+  "templateVersion": "local",
+  "modulePath": "github.com/kurnhyalcantara/araquanid",
+  "appName": "araquanid",
+  "envPrefix": "ARAQUANID",
+  "toggles": {
+    "ci": true,
+    "docker": true,
+    "example": true,
+    "redis": true,
+    "telemetry": true
+  },
+  "generatedAt": "2026-07-01T07:43:28.803565Z",
+  "generatorVersion": "dev"
+}

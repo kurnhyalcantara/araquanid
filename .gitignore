@@ -1,0 +1,27 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+
+# Test & coverage
+coverage.out
+coverage.html
+
+# Local config overrides (never commit real config — use ARAQUANID_ env vars in production)
+config/config.yaml
+config/config.local.yaml
+
+# Compose env files (hold platform secrets — ARAQUANID_POSTGRES__PASSWORD, ARAQUANID_JWT__SECRET)
+.env
+deployments/.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Dependencies
+vendor/

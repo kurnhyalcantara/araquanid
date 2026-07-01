@@ -1,0 +1,50 @@
+name: araquanid
+
+# Runs araquanid as an upstream behind the infernape Kong platform.
+# Joins the shared external `koer-network` and talks to the platform's shared
+# `koer-postgres` / `koer-redis`. Public traffic enters via Kong on :8000
+# (route /api/example -> http://araquanid:8080); see infernape/kong/kong.yaml.
+#
+# Secrets are supplied at runtime via the environment (or a gitignored
+# deployments/.env), never hardcoded here. Required vars:
+#   ARAQUANID_POSTGRES__PASSWORD  (infernape POSTGRES_PASSWORD)
+
+networks:
+  koer-network:
+    external: true
+
+services:
+  migrate:
+    image: migrate/migrate:v4.18.1
+    profiles: ["tools"]
+    networks:
+      - koer-network
+    volumes:
+      - ../migrations:/migrations:ro
+    command:
+      # The password is embedded in this URL. If ARAQUANID_POSTGRES__PASSWORD
+      # contains reserved characters (e.g. '@'), set ARAQUANID_MIGRATE_DATABASE_URL
+      # to a fully URL-encoded DSN instead (e.g. '@' -> '%40').
+      - -path=/migrations
+      - -database=${ARAQUANID_MIGRATE_DATABASE_URL:-postgres://${ARAQUANID_POSTGRES__USER:-admin}:${ARAQUANID_POSTGRES__PASSWORD:?set ARAQUANID_POSTGRES__PASSWORD or ARAQUANID_MIGRATE_DATABASE_URL}@koer-postgres:${ARAQUANID_POSTGRES__PORT:-5432}/${ARAQUANID_POSTGRES__DATABASE:-araquanid}?sslmode=${ARAQUANID_POSTGRES__SSL_MODE:-disable}}
+      - up
+
+  app:
+    profiles: ["app"]
+    container_name: araquanid
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    networks:
+      - koer-network
+    environment:
+      ARAQUANID_POSTGRES__HOST: ${ARAQUANID_POSTGRES__HOST:-koer-postgres}
+      ARAQUANID_POSTGRES__PORT: ${ARAQUANID_POSTGRES__PORT:-5432}
+      ARAQUANID_POSTGRES__USER: ${ARAQUANID_POSTGRES__USER:-admin}
+      ARAQUANID_POSTGRES__PASSWORD: ${ARAQUANID_POSTGRES__PASSWORD:?set ARAQUANID_POSTGRES__PASSWORD}
+      ARAQUANID_POSTGRES__DATABASE: ${ARAQUANID_POSTGRES__DATABASE:-araquanid}
+      ARAQUANID_REDIS__ADDR: ${ARAQUANID_REDIS__ADDR:-koer-redis:6379}
+    ports:
+      - "9090:9090"
+      - "8080:8080"
+      - "9100:9100"
