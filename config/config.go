@@ -27,6 +27,8 @@ type Config struct {
 	Redis     Redis     `koanf:"redis"`
 	Log       Log       `koanf:"log"`
 	Telemetry Telemetry `koanf:"telemetry"`
+	Auth      Auth      `koanf:"auth"`
+	Identity  Identity  `koanf:"identity"`
 }
 
 type App struct {
@@ -80,6 +82,89 @@ type Telemetry struct {
 	SampleRatio  float64 `koanf:"sample_ratio"`
 }
 
+// Auth externalizes the Authentication Module parameters (FRD §16). All values
+// are configurable; defaults() carries the FRD-recommended defaults.
+type Auth struct {
+	Lockout  Lockout  `koanf:"lockout"`
+	Argon2id Argon2id `koanf:"argon2id"`
+	Session  Session  `koanf:"session"`
+	Token    Token    `koanf:"token"`
+	MFA      MFA      `koanf:"mfa"`
+	Device   Device   `koanf:"device"`
+	FIDO2    FIDO2    `koanf:"fido2"`
+}
+
+// Lockout configures credential lockout (FRD §16.1).
+type Lockout struct {
+	Threshold     int           `koanf:"threshold"`
+	Window        time.Duration `koanf:"window"`
+	Tier1Duration time.Duration `koanf:"tier1_duration"`
+	Tier2Duration time.Duration `koanf:"tier2_duration"`
+}
+
+// Argon2id configures the password hashing cost parameters (FRD §16.1).
+type Argon2id struct {
+	TimeCost    uint32 `koanf:"time_cost"`
+	MemoryKB    uint32 `koanf:"memory_kb"`
+	Parallelism uint8  `koanf:"parallelism"`
+}
+
+// Session configures session lifetimes and concurrency (FRD §16.2).
+type Session struct {
+	IdleTimeoutWeb    time.Duration `koanf:"idle_timeout_web"`
+	IdleTimeoutMobile time.Duration `koanf:"idle_timeout_mobile"`
+	AbsoluteWeb       time.Duration `koanf:"absolute_web"`
+	AbsoluteMobile    time.Duration `koanf:"absolute_mobile"`
+	ConcurrentPolicy  string        `koanf:"concurrent_policy"`
+	ConcurrentMax     int           `koanf:"concurrent_max"`
+	MFASessionWindow  time.Duration `koanf:"mfa_session_window"`
+}
+
+// Token configures access/refresh token lifetimes and issuance (FRD §16.3).
+type Token struct {
+	AccessTTL           time.Duration `koanf:"access_ttl"`
+	RefreshTTLWeb       time.Duration `koanf:"refresh_ttl_web"`
+	RefreshTTLMobile    time.Duration `koanf:"refresh_ttl_mobile"`
+	Issuer              string        `koanf:"issuer"`
+	RotationGraceWindow time.Duration `koanf:"rotation_grace_window"`
+}
+
+// MFA configures OTP/TOTP/recovery-code behavior (FRD §16.5).
+type MFA struct {
+	OTPTTL                   time.Duration `koanf:"otp_ttl"`
+	OTPMaxAttempts           int           `koanf:"otp_max_attempts"`
+	OTPResendRateLimit       int           `koanf:"otp_resend_rate_limit"`
+	OTPResendWindow          time.Duration `koanf:"otp_resend_window"`
+	TOTPWindow               int           `koanf:"totp_window"`
+	EnrollmentWindow         time.Duration `koanf:"enrollment_window"`
+	RecoveryCodeCount        int           `koanf:"recovery_code_count"`
+	RecoveryCodeLowThreshold int           `koanf:"recovery_code_low_threshold"`
+}
+
+// Device configures device fingerprinting and trust (FRD §16.6).
+type Device struct {
+	TrustDuration      time.Duration `koanf:"trust_duration"`
+	FingerprintVersion int           `koanf:"fingerprint_version"`
+}
+
+// FIDO2 configures the WebAuthn relying party (FRD §16.7).
+type FIDO2 struct {
+	RPID             string        `koanf:"rp_id"`
+	RPName           string        `koanf:"rp_name"`
+	RPOrigin         string        `koanf:"rp_origin"`
+	UserVerification string        `koanf:"user_verification"`
+	Attestation      string        `koanf:"attestation"`
+	ChallengeTTL     time.Duration `koanf:"challenge_ttl"`
+}
+
+// Identity configures the Identity Context anti-corruption client the auth
+// module dials to resolve identifiers and read display data.
+type Identity struct {
+	// Addr is the Identity Context gRPC endpoint (host:port). Empty leaves the
+	// ACL client unconfigured; calls then fail as unavailable.
+	Addr string `koanf:"addr"`
+}
+
 func defaults() map[string]any {
 	return map[string]any{
 		"app.name":                   "araquanid",
@@ -105,6 +190,44 @@ func defaults() map[string]any {
 		"telemetry.enabled":          false,
 		"telemetry.otlp_endpoint":    "localhost:4317",
 		"telemetry.sample_ratio":     1.0,
+
+		// Authentication Module (FRD §16). Durations use Go duration syntax.
+		"auth.lockout.threshold":               5,
+		"auth.lockout.window":                  "15m",
+		"auth.lockout.tier1_duration":          "30m",
+		"auth.lockout.tier2_duration":          "2h",
+		"auth.argon2id.time_cost":              3,
+		"auth.argon2id.memory_kb":              65536,
+		"auth.argon2id.parallelism":            4,
+		"auth.session.idle_timeout_web":        "15m",
+		"auth.session.idle_timeout_mobile":     "30m",
+		"auth.session.absolute_web":            "8h",
+		"auth.session.absolute_mobile":         "24h",
+		"auth.session.concurrent_policy":       "LIMIT_N",
+		"auth.session.concurrent_max":          5,
+		"auth.session.mfa_session_window":      "10m",
+		"auth.token.access_ttl":                "15m",
+		"auth.token.refresh_ttl_web":           "24h",
+		"auth.token.refresh_ttl_mobile":        "168h",
+		"auth.token.issuer":                    "https://auth.bank.com",
+		"auth.token.rotation_grace_window":     "5s",
+		"auth.mfa.otp_ttl":                     "5m",
+		"auth.mfa.otp_max_attempts":            3,
+		"auth.mfa.otp_resend_rate_limit":       3,
+		"auth.mfa.otp_resend_window":           "10m",
+		"auth.mfa.totp_window":                 1,
+		"auth.mfa.enrollment_window":           "5m",
+		"auth.mfa.recovery_code_count":         10,
+		"auth.mfa.recovery_code_low_threshold": 3,
+		"auth.device.trust_duration":           "720h",
+		"auth.device.fingerprint_version":      1,
+		"auth.fido2.rp_id":                     "bank.com",
+		"auth.fido2.rp_name":                   "Corporate Bank",
+		"auth.fido2.rp_origin":                 "https://portal.bank.com",
+		"auth.fido2.user_verification":         "preferred",
+		"auth.fido2.attestation":               "indirect",
+		"auth.fido2.challenge_ttl":             "5m",
+		"identity.addr":                        "",
 	}
 }
 

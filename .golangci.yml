@@ -40,6 +40,8 @@ linters:
             # subpackages). Add a line here for each new features/<name>.
             - pkg: github.com/kurnhyalcantara/araquanid/internal/features/example/delivery
               desc: usecase must not depend on the delivery layer
+            - pkg: github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery
+              desc: usecase must not depend on the delivery layer
             - pkg: google.golang.org/grpc
               desc: usecase must not depend on transport
             - pkg: github.com/jackc/pgx

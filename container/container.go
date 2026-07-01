@@ -13,6 +13,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	authv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/auth/v1"
 	examplev1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/example/v1"
 	redislib "github.com/redis/go-redis/v9"
 	grpclib "google.golang.org/grpc"
@@ -29,6 +30,12 @@ import (
 	platvalidator "github.com/kurnhyalcantara/kingler/pkg/platform/validator"
 
 	"github.com/kurnhyalcantara/araquanid/config"
+	authgrpc "github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery/grpc"
+	authrest "github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery/rest"
+	authdb "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/db"
+	authidentity "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/identity"
+	authredis "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/redis"
+	authusecase "github.com/kurnhyalcantara/araquanid/internal/features/auth/usecase"
 	examplegrpc "github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/grpc"
 	examplerest "github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/rest"
 	exampledb "github.com/kurnhyalcantara/araquanid/internal/features/example/repository/db"
@@ -105,6 +112,28 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 	exampleUsecase := exampleusecase.New(exampleRepo)
 	exampleHandler := examplegrpc.NewHandler(exampleUsecase, validator.New(baseValidator))
 
+	// Auth feature: identity ACL + repositories -> usecase -> handler.
+	// TODO: dial the Identity Context (cfg.Identity.Addr) once provisioned; until
+	// then the ACL is unconfigured and identity lookups report unavailable.
+	authIdentityACL := authidentity.NewACL(nil)
+	authUsecase := authusecase.New(
+		authdb.NewCredentialRepository(pg),
+		authdb.NewLoginAttemptRepository(pg),
+		authdb.NewMFARepository(pg),
+		authredis.NewMFASessionStore(rdb, cfg.Auth.Session.MFASessionWindow),
+		authIdentityACL,
+		authusecase.Config{
+			LockoutThreshold:      cfg.Auth.Lockout.Threshold,
+			LockoutWindow:         cfg.Auth.Lockout.Window,
+			LockoutTier1Duration:  cfg.Auth.Lockout.Tier1Duration,
+			LockoutTier2Duration:  cfg.Auth.Lockout.Tier2Duration,
+			MFASessionWindow:      cfg.Auth.Session.MFASessionWindow,
+			AccessTTL:             cfg.Auth.Token.AccessTTL,
+			RecoveryCodeLowThresh: cfg.Auth.MFA.RecoveryCodeLowThreshold,
+		},
+	)
+	authHandler := authgrpc.NewHandler(authUsecase, validator.New(baseValidator))
+
 	// Interceptor chain, outermost first.
 	grpcServer, healthServer := platgrpc.NewServer(
 		middleware.RequestID(),
@@ -113,6 +142,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		middleware.AppError(),
 	)
 	examplev1.RegisterExampleServiceServer(grpcServer, exampleHandler)
+	authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 	gatewayMux := platgrpc.NewGatewayMux(middleware.GatewayOptions()...)
@@ -123,6 +153,12 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("container: %w", err)
 	}
 	if err := examplerest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
+		pg.Close()
+		_ = rdb.Close()
+		_ = gatewayConn.Close()
+		return nil, fmt.Errorf("container: %w", err)
+	}
+	if err := authrest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
 		pg.Close()
 		_ = rdb.Close()
 		_ = gatewayConn.Close()
