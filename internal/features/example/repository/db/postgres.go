@@ -1,4 +1,6 @@
-package repository
+// Package db is the PostgreSQL adapter for the example feature's repository
+// port.
+package db
 
 import (
 	"context"
@@ -9,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kurnhyalcantara/araquanid/internal/domain"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/repository"
 )
 
 type postgresRepository struct {
@@ -16,7 +19,7 @@ type postgresRepository struct {
 }
 
 // NewPostgres returns the PostgreSQL-backed example repository.
-func NewPostgres(pool *pgxpool.Pool) Repository {
+func NewPostgres(pool *pgxpool.Pool) repository.Repository {
 	return &postgresRepository{pool: pool}
 }
 

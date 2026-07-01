@@ -29,9 +29,11 @@ import (
 	platvalidator "github.com/kurnhyalcantara/kingler/pkg/platform/validator"
 
 	"github.com/kurnhyalcantara/araquanid/config"
-	"github.com/kurnhyalcantara/araquanid/internal/handler"
-	"github.com/kurnhyalcantara/araquanid/internal/repository"
-	"github.com/kurnhyalcantara/araquanid/internal/usecase"
+	examplegrpc "github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/grpc"
+	examplerest "github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/rest"
+	exampledb "github.com/kurnhyalcantara/araquanid/internal/features/example/repository/db"
+	exampleredis "github.com/kurnhyalcantara/araquanid/internal/features/example/repository/redis"
+	exampleusecase "github.com/kurnhyalcantara/araquanid/internal/features/example/usecase"
 	"github.com/kurnhyalcantara/araquanid/internal/validator"
 )
 
@@ -94,14 +96,14 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 	baseValidator := platvalidator.New()
 
 	// Example feature: repository -> usecase -> handler.
-	exampleRepo := repository.NewRedisCache(
-		repository.NewPostgres(pg),
+	exampleRepo := exampleredis.NewCache(
+		exampledb.NewPostgres(pg),
 		rdb,
 		cfg.Redis.CacheTTL,
 		log,
 	)
-	exampleUsecase := usecase.New(exampleRepo)
-	exampleHandler := handler.NewHandler(exampleUsecase, validator.New(baseValidator))
+	exampleUsecase := exampleusecase.New(exampleRepo)
+	exampleHandler := examplegrpc.NewHandler(exampleUsecase, validator.New(baseValidator))
 
 	// Interceptor chain, outermost first.
 	grpcServer, healthServer := platgrpc.NewServer(
@@ -120,7 +122,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		_ = rdb.Close()
 		return nil, fmt.Errorf("container: %w", err)
 	}
-	if err := handler.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
+	if err := examplerest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
 		pg.Close()
 		_ = rdb.Close()
 		_ = gatewayConn.Close()

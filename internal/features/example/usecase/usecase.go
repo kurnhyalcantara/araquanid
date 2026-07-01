@@ -15,7 +15,7 @@ import (
 	"github.com/kurnhyalcantara/kingler/pkg/pagination"
 
 	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/repository"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/repository"
 )
 
 // ExampleList is the result of a List call: a page of examples plus the token

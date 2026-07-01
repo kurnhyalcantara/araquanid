@@ -1,9 +1,10 @@
 # araquanid
 
 Production-grade Go microservice template — the standard blueprint for new
-services. Layered Clean Architecture (organized by responsibility, not by
-feature), gRPC-first with grpc-gateway REST, PostgreSQL, Redis,
-OpenTelemetry + Prometheus, Docker, and GitHub Actions CI.
+services. Feature-based Clean Architecture (organized by feature, with
+`domain`/`validator` as shared cross-cutting packages), gRPC-first with
+grpc-gateway REST, PostgreSQL, Redis, OpenTelemetry + Prometheus, Docker, and
+GitHub Actions CI.
 
 The repository ships with one complete reference slice — `example`
 (a CRUD resource: create/get/list/update/delete with token-based list
@@ -74,11 +75,15 @@ Ops endpoints on :9100: `/metrics`, `/healthz`, `/readyz`.
 cmd/server/       cobra CLI: serve (config → container → run) + version
 config/           config loader (defaults < ARAQUANID_* env; optional --config yaml overlay)
 internal/
-  domain/         pure domain models and invariants
-  usecase/        application logic (interface + impl; tests against a fake repo)
-  repository/     outbound port (interface) + adapters (postgres.go, redis_cache.go)
-  validator/      input validation → apperror.CodeInvalidArgument
-  handler/        gRPC server impl + REST gateway registration (+ dto, mapper)
+  domain/         shared, pure domain models and invariants (one file per feature)
+  features/
+    example/      one vertical slice per capability
+      delivery/
+        grpc/     gRPC server impl (+ dto, mapper)
+        rest/     REST gateway registration
+      repository/ outbound port (interface) + adapters (db/, redis/, kafka/ as needed)
+      usecase/    application logic (interface + impl; tests against a fake repo)
+  validator/      shared input validation → apperror.CodeInvalidArgument (one file per feature)
 container/        composition root (Build wires everything; Close tears it down)
 migrations/       golang-migrate SQL files
 deployments/      Dockerfile + docker-compose

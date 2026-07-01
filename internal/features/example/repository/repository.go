@@ -1,7 +1,9 @@
-// Package repository defines the outbound port and its adapters. A repository
-// is any outbound dependency abstraction — it may be backed by PostgreSQL,
-// Redis, another gRPC/HTTP service, a third-party API, or a message broker; it
-// is not limited to database access.
+// Package repository defines the outbound port for the example feature. A
+// repository is any outbound dependency abstraction — it may be backed by
+// PostgreSQL, Redis, Kafka, another gRPC/HTTP service, or a third-party API;
+// it is not limited to database access. Adapters live in sibling packages,
+// one per backing store (db, redis, kafka, ...), and are composed by the
+// container.
 package repository
 
 import (
@@ -11,7 +13,8 @@ import (
 )
 
 // Repository is the outbound port consumed by the usecase. Implementations:
-// NewPostgres (primary store) and NewRedisCache (read-through cache decorator).
+// db.NewPostgres (primary store) and redis.NewCache (read-through cache
+// decorator).
 type Repository interface {
 	Create(ctx context.Context, e *domain.Example) error
 	GetByID(ctx context.Context, id string) (*domain.Example, error)

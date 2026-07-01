@@ -20,7 +20,7 @@ import (
 
 	"github.com/kurnhyalcantara/araquanid/config"
 	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/repository"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/repository/db"
 )
 
 func TestPostgresExampleRepository(t *testing.T) {
@@ -49,7 +49,7 @@ func TestPostgresExampleRepository(t *testing.T) {
 	}
 	defer pool.Close()
 
-	repo := repository.NewPostgres(pool)
+	repo := db.NewPostgres(pool)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	e := &domain.Example{

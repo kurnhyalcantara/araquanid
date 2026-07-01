@@ -1,17 +1,17 @@
-// Package handler is the gRPC inbound adapter. It validates requests, maps
-// them to dtos, delegates to the usecase, and maps results back to transport
-// types. The REST surface is the same handler reached through the grpc-gateway
-// (see RegisterREST).
-package handler
+// Package grpc is the gRPC inbound adapter for the example feature. It
+// validates requests, maps them to dtos, delegates to the usecase, and maps
+// results back to transport types. The REST surface is the same handler
+// reached through the grpc-gateway (see the sibling delivery/rest package).
+package grpc
 
 import (
 	"context"
 
 	examplev1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/example/v1"
 
-	"github.com/kurnhyalcantara/araquanid/internal/handler/dto"
-	"github.com/kurnhyalcantara/araquanid/internal/handler/mapper"
-	"github.com/kurnhyalcantara/araquanid/internal/usecase"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/grpc/dto"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/grpc/mapper"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/usecase"
 	"github.com/kurnhyalcantara/araquanid/internal/validator"
 )
 

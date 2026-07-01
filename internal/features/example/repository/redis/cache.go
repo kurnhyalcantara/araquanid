@@ -1,4 +1,6 @@
-package repository
+// Package redis is the Redis read-through cache adapter for the example
+// feature's repository port.
+package redis
 
 import (
 	"context"
@@ -6,25 +8,26 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redislib "github.com/redis/go-redis/v9"
 
 	"github.com/kurnhyalcantara/araquanid/internal/domain"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/repository"
 )
 
-// redisCache is a read-through cache decorator around another Repository.
-// It demonstrates composing outbound adapters: the usecase still sees a
-// single Repository.
+// redisCache is a read-through cache decorator around another
+// repository.Repository. It demonstrates composing outbound adapters: the
+// usecase still sees a single repository.Repository.
 type redisCache struct {
-	next   Repository
-	client *redis.Client
+	next   repository.Repository
+	client *redislib.Client
 	ttl    time.Duration
 	log    *slog.Logger
 }
 
-// NewRedisCache wraps `next` with read-through caching of GetByID lookups.
-// Cache failures are logged and degrade to the underlying repository; they
-// never fail the request.
-func NewRedisCache(next Repository, client *redis.Client, ttl time.Duration, log *slog.Logger) Repository {
+// NewCache wraps `next` with read-through caching of GetByID lookups. Cache
+// failures are logged and degrade to the underlying repository; they never
+// fail the request.
+func NewCache(next repository.Repository, client *redislib.Client, ttl time.Duration, log *slog.Logger) repository.Repository {
 	return &redisCache{next: next, client: client, ttl: ttl, log: log}
 }
 
@@ -44,7 +47,7 @@ func (c *redisCache) GetByID(ctx context.Context, id string) (*domain.Example, e
 		if err := json.Unmarshal(data, &e); err == nil {
 			return &e, nil
 		}
-	} else if err != redis.Nil {
+	} else if err != redislib.Nil {
 		c.log.WarnContext(ctx, "example cache read failed", slog.String("error", err.Error()))
 	}
 

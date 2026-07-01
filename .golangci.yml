@@ -29,14 +29,17 @@ linters:
         # interfaces injected from the container).
         usecase-clean:
           files:
-            - "**/internal/usecase/**"
+            - "**/internal/features/*/usecase/**"
           deny:
             - pkg: github.com/kurnhyalcantara/probopass/gen
-              desc: usecase must not depend on transport types; map in handler/mapper
+              desc: usecase must not depend on transport types; map in delivery/grpc/mapper
             - pkg: github.com/kurnhyalcantara/kingler/pkg/platform
               desc: usecase must not depend on infrastructure; define the port where it is consumed
-            - pkg: github.com/kurnhyalcantara/araquanid/internal/handler
-              desc: usecase must not depend on the handler (delivery) layer
+            # One deny line per feature's delivery package (depguard `pkg`
+            # matches by prefix, so this also covers its grpc/rest
+            # subpackages). Add a line here for each new features/<name>.
+            - pkg: github.com/kurnhyalcantara/araquanid/internal/features/example/delivery
+              desc: usecase must not depend on the delivery layer
             - pkg: google.golang.org/grpc
               desc: usecase must not depend on transport
             - pkg: github.com/jackc/pgx

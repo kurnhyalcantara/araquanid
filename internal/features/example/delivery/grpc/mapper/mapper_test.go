@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/usecase"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/usecase"
 )
 
 func TestToProtoExample(t *testing.T) {

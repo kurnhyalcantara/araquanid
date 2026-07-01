@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/handler/dto"
-	"github.com/kurnhyalcantara/araquanid/internal/usecase"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/grpc/dto"
+	"github.com/kurnhyalcantara/araquanid/internal/features/example/usecase"
 )
 
 func ToProtoExample(e *domain.Example) *examplev1.Example {

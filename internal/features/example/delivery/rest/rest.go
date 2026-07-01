@@ -1,4 +1,6 @@
-package handler
+// Package rest registers the example feature's REST surface, derived from
+// the proto contract's http annotations, onto the shared grpc-gateway mux.
+package rest
 
 import (
 	"context"
