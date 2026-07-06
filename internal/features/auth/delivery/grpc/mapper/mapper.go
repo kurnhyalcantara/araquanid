@@ -7,9 +7,8 @@ package mapper
 import (
 	authv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/auth/v1"
 
-	"github.com/kurnhyalcantara/araquanid/internal/domain"
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 	"github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery/grpc/dto"
-	"github.com/kurnhyalcantara/araquanid/internal/features/auth/usecase"
 )
 
 // ToLoginInputDTO maps the wire request to the validated handler dto.
@@ -35,8 +34,8 @@ func ToLoginInputDTO(req *authv1.LoginRequest) dto.LoginInput {
 
 // ToLoginInput maps the validated dto (plus transport-observed attributes) into
 // the usecase input.
-func ToLoginInput(in dto.LoginInput, ipAddress, userAgent string) usecase.LoginInput {
-	out := usecase.LoginInput{
+func ToLoginInput(in dto.LoginInput, ipAddress, userAgent string) domain_auth.LoginInput {
+	out := domain_auth.LoginInput{
 		Identifier: in.Identifier,
 		Password:   in.Password,
 		ClientID:   in.ClientID,
@@ -44,7 +43,7 @@ func ToLoginInput(in dto.LoginInput, ipAddress, userAgent string) usecase.LoginI
 		UserAgent:  userAgent,
 	}
 	if fp := in.DeviceFingerprint; fp != nil {
-		out.DeviceFingerprint = &usecase.DeviceFingerprintInput{
+		out.DeviceFingerprint = &domain_auth.DeviceFingerprintInput{
 			UserAgent:        fp.UserAgent,
 			AcceptLanguage:   fp.AcceptLanguage,
 			ScreenResolution: fp.ScreenResolution,
@@ -77,16 +76,16 @@ func ToVerifyMFAInputDTO(req *authv1.VerifyMfaRequest) dto.VerifyMFAInput {
 
 // ToVerifyMFAInput maps the validated dto (plus transport-observed attributes)
 // into the usecase input.
-func ToVerifyMFAInput(in dto.VerifyMFAInput, ipAddress, userAgent string) usecase.VerifyMFAInput {
-	out := usecase.VerifyMFAInput{
+func ToVerifyMFAInput(in dto.VerifyMFAInput, ipAddress, userAgent string) domain_auth.VerifyMFAInput {
+	out := domain_auth.VerifyMFAInput{
 		MFASessionToken: in.MFASessionToken,
-		FactorType:      domain.FactorType(in.FactorType),
+		FactorType:      domain_auth.FactorType(in.FactorType),
 		Code:            in.Code,
 		IPAddress:       ipAddress,
 		UserAgent:       userAgent,
 	}
 	if c := in.FIDO2; c != nil {
-		out.FIDO2 = &usecase.FIDO2AssertionInput{
+		out.FIDO2 = &domain_auth.FIDO2AssertionInput{
 			CredentialID:      c.CredentialID,
 			ClientDataJSON:    c.ClientDataJSON,
 			AuthenticatorData: c.AuthenticatorData,
@@ -97,7 +96,7 @@ func ToVerifyMFAInput(in dto.VerifyMFAInput, ipAddress, userAgent string) usecas
 }
 
 // ToLoginResponse maps a usecase result to the wire login response.
-func ToLoginResponse(r *usecase.LoginResult) *authv1.LoginResponse {
+func ToLoginResponse(r *domain_auth.LoginResult) *authv1.LoginResponse {
 	if r == nil {
 		return &authv1.LoginResponse{}
 	}
@@ -117,7 +116,7 @@ func ToLoginResponse(r *usecase.LoginResult) *authv1.LoginResponse {
 }
 
 // ToVerifyMfaResponse maps a usecase result to the wire MFA verify response.
-func ToVerifyMfaResponse(r *usecase.LoginResult) *authv1.VerifyMfaResponse {
+func ToVerifyMfaResponse(r *domain_auth.LoginResult) *authv1.VerifyMfaResponse {
 	if r == nil {
 		return &authv1.VerifyMfaResponse{}
 	}
@@ -133,33 +132,33 @@ func ToVerifyMfaResponse(r *usecase.LoginResult) *authv1.VerifyMfaResponse {
 	}
 }
 
-func authResult(r domain.AuthenticationResult) authv1.AuthenticationResult {
+func authResult(r domain_auth.AuthenticationResult) authv1.AuthenticationResult {
 	switch r {
-	case domain.AuthCompleted:
+	case domain_auth.AuthCompleted:
 		return authv1.AuthenticationResult_AUTHENTICATION_RESULT_COMPLETED
-	case domain.AuthMFARequired:
+	case domain_auth.AuthMFARequired:
 		return authv1.AuthenticationResult_AUTHENTICATION_RESULT_MFA_REQUIRED
-	case domain.AuthPasswordChangeRequired:
+	case domain_auth.AuthPasswordChangeRequired:
 		return authv1.AuthenticationResult_AUTHENTICATION_RESULT_PASSWORD_CHANGE_REQUIRED
 	default:
 		return authv1.AuthenticationResult_AUTHENTICATION_RESULT_UNSPECIFIED
 	}
 }
 
-func aal(a domain.AAL) authv1.Aal {
+func aal(a domain_auth.AAL) authv1.Aal {
 	switch a {
-	case domain.AAL1:
+	case domain_auth.AAL1:
 		return authv1.Aal_AAL_AAL1
-	case domain.AAL2:
+	case domain_auth.AAL2:
 		return authv1.Aal_AAL_AAL2
-	case domain.AAL3:
+	case domain_auth.AAL3:
 		return authv1.Aal_AAL_AAL3
 	default:
 		return authv1.Aal_AAL_UNSPECIFIED
 	}
 }
 
-func factorTypes(fs []domain.FactorType) []authv1.FactorType {
+func factorTypes(fs []domain_auth.FactorType) []authv1.FactorType {
 	if len(fs) == 0 {
 		return nil
 	}
@@ -170,15 +169,15 @@ func factorTypes(fs []domain.FactorType) []authv1.FactorType {
 	return out
 }
 
-func factorType(f domain.FactorType) authv1.FactorType {
+func factorType(f domain_auth.FactorType) authv1.FactorType {
 	switch f {
-	case domain.FactorTOTP:
+	case domain_auth.FactorTOTP:
 		return authv1.FactorType_FACTOR_TYPE_TOTP
-	case domain.FactorSMSOTP:
+	case domain_auth.FactorSMSOTP:
 		return authv1.FactorType_FACTOR_TYPE_SMS_OTP
-	case domain.FactorFIDO2:
+	case domain_auth.FactorFIDO2:
 		return authv1.FactorType_FACTOR_TYPE_FIDO2
-	case domain.FactorRecoveryCode:
+	case domain_auth.FactorRecoveryCode:
 		return authv1.FactorType_FACTOR_TYPE_RECOVERY_CODE
 	default:
 		return authv1.FactorType_FACTOR_TYPE_UNSPECIFIED
@@ -190,13 +189,13 @@ func factorType(f domain.FactorType) authv1.FactorType {
 func factorTypeName(f authv1.FactorType) string {
 	switch f {
 	case authv1.FactorType_FACTOR_TYPE_TOTP:
-		return string(domain.FactorTOTP)
+		return string(domain_auth.FactorTOTP)
 	case authv1.FactorType_FACTOR_TYPE_SMS_OTP:
-		return string(domain.FactorSMSOTP)
+		return string(domain_auth.FactorSMSOTP)
 	case authv1.FactorType_FACTOR_TYPE_FIDO2:
-		return string(domain.FactorFIDO2)
+		return string(domain_auth.FactorFIDO2)
 	case authv1.FactorType_FACTOR_TYPE_RECOVERY_CODE:
-		return string(domain.FactorRecoveryCode)
+		return string(domain_auth.FactorRecoveryCode)
 	default:
 		return ""
 	}

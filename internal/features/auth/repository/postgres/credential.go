@@ -1,5 +1,5 @@
 // Package db is the PostgreSQL adapter for the auth feature's repository ports.
-package db
+package postgres
 
 import (
 	"context"
@@ -9,16 +9,15 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/features/auth/repository"
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 )
 
 type credentialRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewCredentialRepository returns the PostgreSQL-backed credential repository.
-func NewCredentialRepository(pool *pgxpool.Pool) repository.CredentialRepository {
+// NewPostgresCredentialRepository returns the PostgreSQL-backed credential repository.
+func NewPostgresCredentialRepository(pool *pgxpool.Pool) domain_auth.CredentialRepository {
 	return &credentialRepository{pool: pool}
 }
 
@@ -27,8 +26,8 @@ const credentialColumns = `id, identity_id, password_hash, password_algorithm, p
 	last_failed_at, lockout_status, locked_at, locked_until, lockout_history_count,
 	created_at, updated_at`
 
-func (r *credentialRepository) GetByIdentityID(ctx context.Context, identityID string) (*domain.Credential, error) {
-	var c domain.Credential
+func (r *credentialRepository) GetByIdentityID(ctx context.Context, identityID string) (*domain_auth.Credential, error) {
+	var c domain_auth.Credential
 	err := r.pool.QueryRow(ctx,
 		`SELECT `+credentialColumns+` FROM credentials WHERE identity_id = $1`, identityID,
 	).Scan(
@@ -38,7 +37,7 @@ func (r *credentialRepository) GetByIdentityID(ctx context.Context, identityID s
 		&c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, domain.ErrCredentialNotFound
+		return nil, domain_auth.ErrCredentialNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("auth repository: get credential: %w", err)
@@ -46,7 +45,7 @@ func (r *credentialRepository) GetByIdentityID(ctx context.Context, identityID s
 	return &c, nil
 }
 
-func (r *credentialRepository) Update(ctx context.Context, c *domain.Credential) error {
+func (r *credentialRepository) Update(ctx context.Context, c *domain_auth.Credential) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE credentials SET
 			password_hash = $2, password_algorithm = $3, password_version = $4,
@@ -63,7 +62,7 @@ func (r *credentialRepository) Update(ctx context.Context, c *domain.Credential)
 		return fmt.Errorf("auth repository: update credential: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.ErrCredentialNotFound
+		return domain_auth.ErrCredentialNotFound
 	}
 	return nil
 }

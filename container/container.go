@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	authv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/auth/v1"
-	examplev1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/example/v1"
 	redislib "github.com/redis/go-redis/v9"
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -30,17 +29,14 @@ import (
 	platvalidator "github.com/kurnhyalcantara/kingler/pkg/platform/validator"
 
 	"github.com/kurnhyalcantara/araquanid/config"
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 	authgrpc "github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery/grpc"
 	authrest "github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery/rest"
-	authdb "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/db"
 	authidentity "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/identity"
+	authdb "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/postgres"
 	authredis "github.com/kurnhyalcantara/araquanid/internal/features/auth/repository/redis"
 	authusecase "github.com/kurnhyalcantara/araquanid/internal/features/auth/usecase"
-	examplegrpc "github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/grpc"
 	examplerest "github.com/kurnhyalcantara/araquanid/internal/features/example/delivery/rest"
-	exampledb "github.com/kurnhyalcantara/araquanid/internal/features/example/repository/db"
-	exampleredis "github.com/kurnhyalcantara/araquanid/internal/features/example/repository/redis"
-	exampleusecase "github.com/kurnhyalcantara/araquanid/internal/features/example/usecase"
 	"github.com/kurnhyalcantara/araquanid/internal/validator"
 )
 
@@ -102,34 +98,26 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 
 	baseValidator := platvalidator.New()
 
-	// Example feature: repository -> usecase -> handler.
-	exampleRepo := exampleredis.NewCache(
-		exampledb.NewPostgres(pg),
-		rdb,
-		cfg.Redis.CacheTTL,
-		log,
-	)
-	exampleUsecase := exampleusecase.New(exampleRepo)
-	exampleHandler := examplegrpc.NewHandler(exampleUsecase, validator.New(baseValidator))
-
 	// Auth feature: identity ACL + repositories -> usecase -> handler.
 	// TODO: dial the Identity Context (cfg.Identity.Addr) once provisioned; until
 	// then the ACL is unconfigured and identity lookups report unavailable.
 	authIdentityACL := authidentity.NewACL(nil)
 	authUsecase := authusecase.New(
-		authdb.NewCredentialRepository(pg),
-		authdb.NewLoginAttemptRepository(pg),
-		authdb.NewMFARepository(pg),
-		authredis.NewMFASessionStore(rdb, cfg.Auth.Session.MFASessionWindow),
-		authIdentityACL,
-		authusecase.Config{
-			LockoutThreshold:      cfg.Auth.Lockout.Threshold,
-			LockoutWindow:         cfg.Auth.Lockout.Window,
-			LockoutTier1Duration:  cfg.Auth.Lockout.Tier1Duration,
-			LockoutTier2Duration:  cfg.Auth.Lockout.Tier2Duration,
-			MFASessionWindow:      cfg.Auth.Session.MFASessionWindow,
-			AccessTTL:             cfg.Auth.Token.AccessTTL,
-			RecoveryCodeLowThresh: cfg.Auth.MFA.RecoveryCodeLowThreshold,
+		authusecase.Dependencies{
+			CredentialRepository:   authdb.NewPostgresCredentialRepository(pg),
+			LoginAttemptRepository: authdb.NewPostgresLoginAttemptRepository(pg),
+			MFARepository:          authdb.NewPostgresMFARepository(pg),
+			MFASessionStore:        authredis.NewRedisMFASessionStore(rdb, cfg.Redis.CacheTTL),
+			IdentityACL:            authIdentityACL,
+			Config: domain_auth.Config{
+				LockoutThreshold:      cfg.Auth.Lockout.Threshold,
+				LockoutWindow:         cfg.Auth.Lockout.Window,
+				LockoutTier1Duration:  cfg.Auth.Lockout.Tier1Duration,
+				LockoutTier2Duration:  cfg.Auth.Lockout.Tier2Duration,
+				MFASessionWindow:      cfg.Auth.Session.MFASessionWindow,
+				AccessTTL:             cfg.Auth.Token.AccessTTL,
+				RecoveryCodeLowThresh: cfg.Auth.MFA.RecoveryCodeLowThreshold,
+			},
 		},
 	)
 	authHandler := authgrpc.NewHandler(authUsecase, validator.New(baseValidator))
@@ -141,7 +129,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		middleware.Logging(log),
 		middleware.AppError(),
 	)
-	examplev1.RegisterExampleServiceServer(grpcServer, exampleHandler)
+
 	authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 

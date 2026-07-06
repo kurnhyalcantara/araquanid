@@ -1,4 +1,4 @@
-package db
+package postgres
 
 import (
 	"context"
@@ -6,21 +6,20 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/features/auth/repository"
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 )
 
 type loginAttemptRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewLoginAttemptRepository returns the PostgreSQL-backed, append-only login
+// NewPostgresLoginAttemptRepository returns the PostgreSQL-backed, append-only login
 // attempt audit repository.
-func NewLoginAttemptRepository(pool *pgxpool.Pool) repository.LoginAttemptRepository {
+func NewPostgresLoginAttemptRepository(pool *pgxpool.Pool) domain_auth.LoginAttemptRepository {
 	return &loginAttemptRepository{pool: pool}
 }
 
-func (r *loginAttemptRepository) Create(ctx context.Context, a *domain.LoginAttempt) error {
+func (r *loginAttemptRepository) Create(ctx context.Context, a *domain_auth.LoginAttempt) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO login_attempts
 			(id, identity_id, identifier_hash, outcome, failure_reason, ip_address,

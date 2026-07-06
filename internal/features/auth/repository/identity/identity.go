@@ -13,8 +13,7 @@ import (
 
 	identityv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/identity/v1"
 
-	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/features/auth/repository"
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 )
 
 // ErrUnavailable is returned when the ACL has no configured Identity Context
@@ -28,11 +27,11 @@ type identityACL struct {
 // NewACL returns the Identity Context anti-corruption adapter. A nil client
 // leaves the ACL unconfigured; calls then fail with ErrUnavailable (the
 // Identity Context is dialed once its endpoint is provisioned).
-func NewACL(client identityv1.IdentityServiceClient) repository.IdentityACL {
+func NewACL(client identityv1.IdentityServiceClient) domain_auth.IdentityACL {
 	return &identityACL{client: client}
 }
 
-func (a *identityACL) Resolve(ctx context.Context, identifier string) (*domain.IdentityRef, bool, error) {
+func (a *identityACL) Resolve(ctx context.Context, identifier string) (*domain_auth.IdentityRef, bool, error) {
 	if a.client == nil {
 		return nil, false, ErrUnavailable
 	}
@@ -43,14 +42,14 @@ func (a *identityACL) Resolve(ctx context.Context, identifier string) (*domain.I
 	if !resp.GetFound() {
 		return nil, false, nil
 	}
-	return &domain.IdentityRef{
+	return &domain_auth.IdentityRef{
 		IdentityID:  resp.GetIdentityId(),
 		Status:      identityStatus(resp.GetStatus()),
 		CorporateID: resp.GetCorporateId(),
 	}, true, nil
 }
 
-func (a *identityACL) Get(ctx context.Context, identityID string) (*domain.IdentityRef, error) {
+func (a *identityACL) Get(ctx context.Context, identityID string) (*domain_auth.IdentityRef, error) {
 	if a.client == nil {
 		return nil, ErrUnavailable
 	}
@@ -58,7 +57,7 @@ func (a *identityACL) Get(ctx context.Context, identityID string) (*domain.Ident
 	if err != nil {
 		return nil, fmt.Errorf("auth repository: get identity: %w", err)
 	}
-	return &domain.IdentityRef{
+	return &domain_auth.IdentityRef{
 		IdentityID:  resp.GetIdentityId(),
 		Username:    resp.GetUsername(),
 		DisplayName: resp.GetDisplayName(),
@@ -69,18 +68,18 @@ func (a *identityACL) Get(ctx context.Context, identityID string) (*domain.Ident
 }
 
 // identityStatus maps the wire enum into the auth domain's status.
-func identityStatus(s identityv1.IdentityStatus) domain.IdentityStatus {
+func identityStatus(s identityv1.IdentityStatus) domain_auth.IdentityStatus {
 	switch s {
 	case identityv1.IdentityStatus_IDENTITY_STATUS_ACTIVE:
-		return domain.IdentityActive
+		return domain_auth.IdentityActive
 	case identityv1.IdentityStatus_IDENTITY_STATUS_INACTIVE:
-		return domain.IdentityInactive
+		return domain_auth.IdentityInactive
 	case identityv1.IdentityStatus_IDENTITY_STATUS_SUSPENDED:
-		return domain.IdentitySuspended
+		return domain_auth.IdentitySuspended
 	case identityv1.IdentityStatus_IDENTITY_STATUS_PENDING_ACTIVATION:
-		return domain.IdentityPendingActivation
+		return domain_auth.IdentityPendingActivation
 	case identityv1.IdentityStatus_IDENTITY_STATUS_DELETED:
-		return domain.IdentityDeleted
+		return domain_auth.IdentityDeleted
 	default:
 		return ""
 	}

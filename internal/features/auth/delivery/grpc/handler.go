@@ -12,19 +12,19 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 	"github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery/grpc/mapper"
-	"github.com/kurnhyalcantara/araquanid/internal/features/auth/usecase"
 	"github.com/kurnhyalcantara/araquanid/internal/validator"
 )
 
 type Handler struct {
 	authv1.UnimplementedAuthServiceServer
 
-	usecase   usecase.Usecase
+	usecase   domain_auth.Usecase
 	validator *validator.Validator
 }
 
-func NewHandler(uc usecase.Usecase, val *validator.Validator) *Handler {
+func NewHandler(uc domain_auth.Usecase, val *validator.Validator) *Handler {
 	return &Handler{usecase: uc, validator: val}
 }
 
@@ -39,19 +39,6 @@ func (h *Handler) Login(ctx context.Context, req *authv1.LoginRequest) (*authv1.
 		return nil, err
 	}
 	return mapper.ToLoginResponse(res), nil
-}
-
-func (h *Handler) VerifyMfa(ctx context.Context, req *authv1.VerifyMfaRequest) (*authv1.VerifyMfaResponse, error) {
-	in := mapper.ToVerifyMFAInputDTO(req)
-	if err := h.validator.VerifyMFA(in); err != nil {
-		return nil, err
-	}
-
-	res, err := h.usecase.VerifyMFA(ctx, mapper.ToVerifyMFAInput(in, clientIP(ctx), userAgent(ctx)))
-	if err != nil {
-		return nil, err
-	}
-	return mapper.ToVerifyMfaResponse(res), nil
 }
 
 // clientIP derives the caller IP from the forwarded header (first hop) or the

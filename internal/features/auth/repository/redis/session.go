@@ -11,8 +11,7 @@ import (
 
 	redislib "github.com/redis/go-redis/v9"
 
-	"github.com/kurnhyalcantara/araquanid/internal/domain"
-	"github.com/kurnhyalcantara/araquanid/internal/features/auth/repository"
+	domain_auth "github.com/kurnhyalcantara/araquanid/internal/domain/auth"
 )
 
 // mfaSessionStore stores in-flight MFA challenge state under an opaque token
@@ -23,30 +22,30 @@ type mfaSessionStore struct {
 	ttl    time.Duration
 }
 
-// NewMFASessionStore returns a Redis-backed MFA session store. ttl is the MFA
+// NewRedisMFASessionStore returns a Redis-backed MFA session store. ttl is the MFA
 // session window (auth.session.mfa_session_window).
-func NewMFASessionStore(client *redislib.Client, ttl time.Duration) repository.MFASessionStore {
+func NewRedisMFASessionStore(client *redislib.Client, ttl time.Duration) domain_auth.MFASessionStore {
 	return &mfaSessionStore{client: client, ttl: ttl}
 }
 
 func sessionKey(token string) string { return "mfa_session:" + token }
 
-func (s *mfaSessionStore) Get(ctx context.Context, token string) (*domain.MFASession, error) {
+func (s *mfaSessionStore) Get(ctx context.Context, token string) (*domain_auth.MFASession, error) {
 	data, err := s.client.Get(ctx, sessionKey(token)).Bytes()
 	if errors.Is(err, redislib.Nil) {
-		return nil, domain.ErrMFASessionInvalid
+		return nil, domain_auth.ErrMFASessionInvalid
 	}
 	if err != nil {
 		return nil, fmt.Errorf("auth repository: get mfa session: %w", err)
 	}
-	var sess domain.MFASession
+	var sess domain_auth.MFASession
 	if err := json.Unmarshal(data, &sess); err != nil {
 		return nil, fmt.Errorf("auth repository: decode mfa session: %w", err)
 	}
 	return &sess, nil
 }
 
-func (s *mfaSessionStore) Save(ctx context.Context, sess *domain.MFASession) error {
+func (s *mfaSessionStore) Save(ctx context.Context, sess *domain_auth.MFASession) error {
 	data, err := json.Marshal(sess)
 	if err != nil {
 		return fmt.Errorf("auth repository: encode mfa session: %w", err)
