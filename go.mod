@@ -11,7 +11,7 @@ require (
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.5
-	github.com/kurnhyalcantara/kingler v0.1.1-0.20260707093441-d1808691df41
+	github.com/kurnhyalcantara/kingler v0.1.2-beta.1
 	github.com/kurnhyalcantara/probopass v0.0.0-20260623055517-0a9cf0df2706
 	github.com/redis/go-redis/v9 v9.20.1
 	github.com/spf13/cobra v1.10.2
