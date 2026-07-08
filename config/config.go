@@ -39,9 +39,10 @@ type App struct {
 
 func (a App) IsProduction() bool { return a.Env == "production" }
 
+// Server holds the ops server port and shutdown budget. The gRPC and gateway
+// listen ports are not configured here: they come from the shared service
+// catalog (kingler pkg/platform/service) so the bind and dial sides cannot drift.
 type Server struct {
-	GRPCPort        int           `koanf:"grpc_port"`
-	HTTPPort        int           `koanf:"http_port"`
 	MetricsPort     int           `koanf:"metrics_port"`
 	ShutdownTimeout time.Duration `koanf:"shutdown_timeout"`
 }
@@ -170,8 +171,6 @@ func defaults() map[string]any {
 		"app.name":                   "araquanid",
 		"app.env":                    "development",
 		"app.version":                "dev",
-		"server.grpc_port":           9090,
-		"server.http_port":           8080,
 		"server.metrics_port":        9100,
 		"server.shutdown_timeout":    "15s",
 		"postgres.host":              "localhost",

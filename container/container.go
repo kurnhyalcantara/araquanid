@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	authv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/auth/v1"
+	identityv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/identity/v1"
 	redislib "github.com/redis/go-redis/v9"
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -25,6 +26,7 @@ import (
 	"github.com/kurnhyalcantara/kingler/pkg/platform/postgres"
 
 	"github.com/kurnhyalcantara/kingler/pkg/platform/redis"
+	"github.com/kurnhyalcantara/kingler/pkg/platform/service"
 	"github.com/kurnhyalcantara/kingler/pkg/platform/telemetry"
 	platvalidator "github.com/kurnhyalcantara/kingler/pkg/platform/validator"
 
@@ -51,7 +53,7 @@ type Container struct {
 	HealthServer *health.Server
 	GatewayMux   *runtime.ServeMux
 
-	gatewayConn *grpclib.ClientConn
+	clients *platgrpc.Clients
 }
 
 // Build constructs the full application graph.
@@ -98,10 +100,32 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 
 	baseValidator := platvalidator.New()
 
-	// Auth feature: identity ACL + repositories -> usecase -> handler.
-	// TODO: dial the Identity Context (cfg.Identity.Addr) once provisioned; until
-	// then the ACL is unconfigured and identity lookups report unavailable.
-	authIdentityACL := authidentity.NewACL(nil)
+	// Outbound gRPC clients: the gateway's loopback connection to this process's
+	// own server, plus the Identity Context (added only when its endpoint is
+	// configured). Ports come from the shared service catalog so the bind and
+	// dial sides cannot drift.
+	ep := service.Registry[service.Auth]
+	clientsCfg := platgrpc.ClientsConfig{
+		"loopback": {Target: ep.GRPCTarget("localhost")},
+	}
+	if cfg.Identity.Addr != "" {
+		clientsCfg["identity"] = platgrpc.ClientConfig{Target: cfg.Identity.Addr}
+	}
+	clients, err := platgrpc.NewClients(clientsCfg)
+	if err != nil {
+		pg.Close()
+		_ = rdb.Close()
+		return nil, fmt.Errorf("container: %w", err)
+	}
+
+	// Auth feature: identity ACL + repositories -> usecase -> handler. A nil
+	// client (Identity endpoint unconfigured) leaves the ACL unavailable and
+	// identity lookups report unavailable.
+	var identityClient identityv1.IdentityServiceClient
+	if conn := clients.Get("identity"); conn != nil {
+		identityClient = identityv1.NewIdentityServiceClient(conn)
+	}
+	authIdentityACL := authidentity.NewACL(identityClient)
 	authUsecase := authusecase.New(
 		authusecase.Dependencies{
 			CredentialRepository:   authdb.NewPostgresCredentialRepository(pg),
@@ -134,22 +158,17 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 	gatewayMux := platgrpc.NewGatewayMux(middleware.GatewayOptions()...)
-	gatewayConn, err := platgrpc.NewLoopbackClient(cfg.Server.GRPCPort)
-	if err != nil {
-		pg.Close()
-		_ = rdb.Close()
-		return nil, fmt.Errorf("container: %w", err)
-	}
+	gatewayConn := clients.Get("loopback")
 	if err := examplerest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
 		pg.Close()
 		_ = rdb.Close()
-		_ = gatewayConn.Close()
+		_ = clients.Close()
 		return nil, fmt.Errorf("container: %w", err)
 	}
 	if err := authrest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
 		pg.Close()
 		_ = rdb.Close()
-		_ = gatewayConn.Close()
+		_ = clients.Close()
 		return nil, fmt.Errorf("container: %w", err)
 	}
 
@@ -162,7 +181,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		GRPCServer:   grpcServer,
 		HealthServer: healthServer,
 		GatewayMux:   gatewayMux,
-		gatewayConn:  gatewayConn,
+		clients:      clients,
 	}, nil
 }
 
@@ -182,7 +201,7 @@ func (c *Container) Ready(ctx context.Context) error {
 // must already be stopped by the caller.
 func (c *Container) Close(ctx context.Context) error {
 	errs := []error{
-		c.gatewayConn.Close(),
+		c.clients.Close(),
 		c.Redis.Close(),
 		c.Telemetry.Shutdown(ctx),
 	}

@@ -3,7 +3,7 @@ name: araquanid
 # Runs araquanid as an upstream behind the infernape Kong platform.
 # Joins the shared external `koer-network` and talks to the platform's shared
 # `koer-postgres` / `koer-redis`. Public traffic enters via Kong on :8000
-# (route /api/example -> http://araquanid:8080); see infernape/kong/kong.yaml.
+# (route /api/example -> http://araquanid:8081); see infernape/kong/kong.yaml.
 #
 # Secrets are supplied at runtime via the environment (or a gitignored
 # deployments/.env), never hardcoded here. Required vars:
@@ -45,6 +45,6 @@ services:
       ARAQUANID_POSTGRES__DATABASE: ${ARAQUANID_POSTGRES__DATABASE:-araquanid}
       ARAQUANID_REDIS__ADDR: ${ARAQUANID_REDIS__ADDR:-koer-redis:6379}
     ports:
-      - "9090:9090"
-      - "8080:8080"
+      - "50051:50051"
+      - "8081:8081"
       - "9100:9100"
