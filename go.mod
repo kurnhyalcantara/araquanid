@@ -15,7 +15,7 @@ require (
 	github.com/kurnhyalcantara/probopass v0.0.0-20260623055517-0a9cf0df2706
 	github.com/redis/go-redis/v9 v9.20.1
 	github.com/spf13/cobra v1.10.2
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.83.1
 	google.golang.org/protobuf v1.36.11
 )
 
