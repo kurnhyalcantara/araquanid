@@ -4,6 +4,7 @@ CREATE TABLE credentials (
     id                    UUID PRIMARY KEY,
     identity_id           UUID        NOT NULL UNIQUE,
     password_hash         TEXT        NOT NULL,
+    password_salt         TEXT        NOT NULL,
     password_algorithm    TEXT        NOT NULL DEFAULT 'argon2id',
     password_version      INT         NOT NULL DEFAULT 1,
     password_created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -14,7 +15,8 @@ CREATE TABLE credentials (
     lockout_status        TEXT        NOT NULL DEFAULT 'UNLOCKED',
     locked_at             TIMESTAMPTZ,
     locked_until          TIMESTAMPTZ,
-    -- Cumulative lifetime lockout counter; never reset (FR-LOGIN-009).
+    -- Cumulative lifetime lockout counter driving escalation; never reset
+    -- (PRD FR-LOGIN-004, FRD FR-LOGIN-009).
     lockout_history_count INT         NOT NULL DEFAULT 0,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()

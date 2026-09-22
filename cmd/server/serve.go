@@ -42,14 +42,12 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	log := c.Logger
 	ep := service.Registry[service.Auth]
 
-	// The runner owns the gRPC + gateway lifecycle, but not the ops server
-	// (metrics/health kept off the public port); run it alongside and shut it
-	// down via an OnShutdown hook.
 	opsServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.MetricsPort),
 		Handler:           opsMux(c),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+
 	go func() {
 		log.Info("ops server listening (metrics, health)", slog.Int("port", cfg.Server.MetricsPort))
 		if err := opsServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
