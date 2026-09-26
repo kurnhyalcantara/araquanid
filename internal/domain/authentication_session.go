@@ -68,7 +68,7 @@ func (s SessionStatus) Valid() bool {
 	return s == SessionStatusActive || s == SessionStatusExpired || s == SessionStatusRevoked
 }
 
-// RevokeReason explains why a session ended (PRD §13.5).
+// RevokeReason explains why a session ended.
 type RevokeReason string
 
 const (
@@ -132,7 +132,7 @@ type DomainEvent interface {
 
 const aggregateAuthenticationSession = "AuthenticationSession"
 
-// SessionCreated — a new verified session was established (PRD §13.4).
+// SessionCreated — a new verified session was established.
 type SessionCreated struct {
 	SessionID         SessionID
 	IdentityID        IdentityRef
@@ -164,7 +164,7 @@ func (e SessionRevoked) AggregateID() string   { return string(e.SessionID) }
 func (e SessionRevoked) OccurredAt() time.Time { return e.At }
 
 // AuthenticationSession is the aggregate root representing an active,
-// verified authentication state for a principal (PRD §7.1, FR-SESSION-*).
+// verified authentication state for a principal.
 //
 // Invariants:
 //   - a session is never both ACTIVE and expired;
@@ -251,7 +251,7 @@ func NewAuthenticationSession(p NewSessionParams) (*AuthenticationSession, error
 }
 
 // validateAALFactors enforces that the assurance level matches the factors
-// actually verified (PRD §4 AAL definitions).
+// actually verified.
 func validateAALFactors(aal AAL, factors []FactorType) error {
 	switch aal {
 	case AAL1:

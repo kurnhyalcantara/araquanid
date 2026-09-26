@@ -34,7 +34,7 @@ const (
 // Valid reports whether a is a supported algorithm.
 func (a PasswordAlgorithm) Valid() bool { return a == PasswordArgon2id || a == PasswordBcrypt }
 
-// PasswordHash is an immutable, already-hashed password (PRD §7.3). Hashing
+// PasswordHash is an immutable, already-hashed password. Hashing
 // and comparison happen outside the domain.
 type PasswordHash struct {
 	hash      string
@@ -92,7 +92,7 @@ func (s LockoutStatus) Valid() bool {
 }
 
 // LoginFailureReason is the failure reason carried by LoginFailed events
-// raised by the credential (PRD §13.2).
+// raised by the credential.
 type LoginFailureReason string
 
 const (
@@ -100,7 +100,7 @@ const (
 	FailureAccountLocked      LoginFailureReason = "ACCOUNT_LOCKED"
 )
 
-// PasswordChangeType classifies a password change (PRD §13.6).
+// PasswordChangeType classifies a password change.
 type PasswordChangeType string
 
 const (
@@ -109,14 +109,14 @@ const (
 )
 
 // LockoutPolicy governs failed-attempt lockout and its escalation
-// (FR-LOGIN-003/004). A lock beyond len(TemporaryDurations) is permanent.
+// A lock beyond len(TemporaryDurations) is permanent.
 type LockoutPolicy struct {
 	Threshold          int
 	Window             time.Duration
 	TemporaryDurations []time.Duration
 }
 
-// DefaultLockoutPolicy returns the PRD defaults: 5 failures within 15m;
+// DefaultLockoutPolicy returns the defaults: 5 failures within 15m;
 // escalation 30m, 2h, then permanent.
 func DefaultLockoutPolicy() LockoutPolicy {
 	return LockoutPolicy{
@@ -139,14 +139,14 @@ func (p LockoutPolicy) Validate() error {
 	return nil
 }
 
-// CredentialPolicy governs password history and expiry (FR-PWD-002/003).
+// CredentialPolicy governs password history and expiry.
 // MaxAge 0 means passwords never expire.
 type CredentialPolicy struct {
 	HistoryDepth int
 	MaxAge       time.Duration
 }
 
-// DefaultCredentialPolicy returns the PRD defaults: 12 remembered passwords,
+// DefaultCredentialPolicy returns: 12 remembered passwords,
 // 180-day expiry (corporate users).
 func DefaultCredentialPolicy() CredentialPolicy {
 	return CredentialPolicy{HistoryDepth: 12, MaxAge: 180 * 24 * time.Hour}
@@ -168,7 +168,7 @@ func (p CredentialPolicy) expiryFrom(t time.Time) *time.Time {
 	return &exp
 }
 
-// AttemptContext is the client context of a login attempt (FR-LOGIN-005).
+// AttemptContext is the client context of a login attempt.
 type AttemptContext struct {
 	CompanyCode       string
 	IP                netip.Addr
@@ -178,7 +178,7 @@ type AttemptContext struct {
 
 const aggregateCredential = "CredentialAggregate"
 
-// LoginFailed — a login attempt against this credential failed (PRD §13.2).
+// LoginFailed — a login attempt against this credential failed.
 type LoginFailed struct {
 	CredentialID       CredentialID
 	IdentityID         IdentityRef
@@ -196,7 +196,7 @@ func (e LoginFailed) AggregateType() string { return aggregateCredential }
 func (e LoginFailed) AggregateID() string   { return string(e.CredentialID) }
 func (e LoginFailed) OccurredAt() time.Time { return e.At }
 
-// AccountLocked — the credential was locked by policy (PRD §13.3).
+// AccountLocked — the credential was locked by policy.
 // LockoutType carries the domain status; the outbox serializer maps it to the
 // public contract (LOCKED_TEMPORARY -> TEMPORARY, LOCKED_PERMANENT -> PERMANENT).
 type AccountLocked struct {
@@ -215,7 +215,6 @@ func (e AccountLocked) AggregateID() string   { return string(e.CredentialID) }
 func (e AccountLocked) OccurredAt() time.Time { return e.At }
 
 // AccountUnlocked — the lock was lifted, automatically or by an admin
-// (US-003, PRD §13.15).
 type AccountUnlocked struct {
 	CredentialID        CredentialID
 	IdentityID          IdentityRef
@@ -230,7 +229,7 @@ func (e AccountUnlocked) AggregateID() string   { return string(e.CredentialID) 
 func (e AccountUnlocked) OccurredAt() time.Time { return e.At }
 
 // PasswordChanged — the password was changed by an authenticated user
-// (PRD §13.6). sessions_revoked_count is added by the usecase.
+// . sessions_revoked_count is added by the usecase.
 type PasswordChanged struct {
 	CredentialID CredentialID
 	IdentityID   IdentityRef
@@ -244,8 +243,7 @@ func (e PasswordChanged) AggregateType() string { return aggregateCredential }
 func (e PasswordChanged) AggregateID() string   { return string(e.CredentialID) }
 func (e PasswordChanged) OccurredAt() time.Time { return e.At }
 
-// PasswordResetCompleted — the password was reset via a reset token
-// (PRD §13.8).
+// PasswordResetCompleted — the password was reset via a reset token.
 type PasswordResetCompleted struct {
 	CredentialID CredentialID
 	IdentityID   IdentityRef
@@ -257,8 +255,7 @@ func (e PasswordResetCompleted) AggregateType() string { return aggregateCredent
 func (e PasswordResetCompleted) AggregateID() string   { return string(e.CredentialID) }
 func (e PasswordResetCompleted) OccurredAt() time.Time { return e.At }
 
-// AdminInitiatedPasswordReset — an admin required a password change at next
-// login (FR-PWD-007, US-007, PRD §13.16).
+// AdminInitiatedPasswordReset — an admin required a password change at next login.
 type AdminInitiatedPasswordReset struct {
 	CredentialID CredentialID
 	IdentityID   IdentityRef
@@ -290,8 +287,6 @@ type Credential struct {
 	lockoutStatus       LockoutStatus
 	lockedAt            *time.Time
 	lockedUntil         *time.Time
-	// lockoutHistoryCount is a lifetime counter driving lockout escalation
-	// (FR-LOGIN-004); it is never reset by unlocking.
 	lockoutHistoryCount int
 	history             []PasswordHistoryEntry // newest first
 
@@ -370,13 +365,13 @@ func (c *Credential) IsPasswordExpired(now time.Time) bool {
 }
 
 // RequiresPasswordChange reports whether the user must change the password
-// before accessing protected resources (FR-PWD-003, FR-PWD-007).
+// before accessing protected resources.
 func (c *Credential) RequiresPasswordChange(now time.Time) bool {
 	return c.forcePasswordChange || c.IsPasswordExpired(now)
 }
 
 // EnsureVerifiable returns ErrAccountLocked while the credential is locked.
-// An elapsed temporary lock is lifted here (US-003), resetting the counter and
+// An elapsed temporary lock is lifted here, resetting the counter and
 // recording AccountUnlocked.
 func (c *Credential) EnsureVerifiable(now time.Time) error {
 	switch c.lockoutStatus {
@@ -392,7 +387,7 @@ func (c *Credential) EnsureVerifiable(now time.Time) error {
 	return nil
 }
 
-// RecordFailedAttempt registers a failed verification (FR-LOGIN-003). It
+// RecordFailedAttempt registers a failed verification. It
 // records LoginFailed and, when the threshold is reached, locks the credential
 // and records AccountLocked. On an already locked credential it records
 // LoginFailed(ACCOUNT_LOCKED), leaves the counter untouched and returns
@@ -442,7 +437,7 @@ func (c *Credential) Unlock(by IdentityRef, now time.Time) error {
 }
 
 // ChangePassword replaces the password for an authenticated user
-// (FR-PWD-006). The caller verifies the current password beforehand; isReuse
+// The caller verifies the current password beforehand; isReuse
 // must match the new plaintext against stored hashes.
 func (c *Credential) ChangePassword(newHash PasswordHash, isReuse PasswordMatcher, by IdentityRef, policy CredentialPolicy, now time.Time) error {
 	if err := policy.Validate(); err != nil {
@@ -470,7 +465,7 @@ func (c *Credential) ChangePassword(newHash PasswordHash, isReuse PasswordMatche
 }
 
 // ResetPassword replaces the password via a validated reset token
-// (FR-PWD-005). It is refused on a permanently locked credential; a temporary
+// It is refused on a permanently locked credential; a temporary
 // lock is left in place.
 func (c *Credential) ResetPassword(newHash PasswordHash, isReuse PasswordMatcher, policy CredentialPolicy, now time.Time) error {
 	if err := policy.Validate(); err != nil {
@@ -488,7 +483,7 @@ func (c *Credential) ResetPassword(newHash PasswordHash, isReuse PasswordMatcher
 }
 
 // MarkForcePasswordChange requires a password change at next login
-// (FR-PWD-007). It is idempotent: only the first call records an event.
+// It is idempotent: only the first call records an event.
 func (c *Credential) MarkForcePasswordChange(by IdentityRef, now time.Time) error {
 	if by == "" {
 		return fmt.Errorf("%w: initiator is required", ErrInvalidCredential)
@@ -585,7 +580,6 @@ func (c *Credential) recordLoginFailed(attempt AttemptContext, reason LoginFailu
 func (c *Credential) record(e DomainEvent) { c.events = append(c.events, e) }
 
 // CredentialSnapshot is the flat persistence shape of a credential
-// (credentials + password_history tables, PRD §12).
 type CredentialSnapshot struct {
 	ID                  CredentialID
 	IdentityID          IdentityRef
