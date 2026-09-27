@@ -29,6 +29,7 @@ type Config struct {
 	Telemetry Telemetry `koanf:"telemetry"`
 	Auth      Auth      `koanf:"auth"`
 	Identity  Identity  `koanf:"identity"`
+	Kafka     Kafka     `koanf:"kafka"`
 }
 
 type App struct {
@@ -86,13 +87,14 @@ type Telemetry struct {
 // Auth externalizes the Authentication Module parameters (FRD §16). All values
 // are configurable; defaults() carries the FRD-recommended defaults.
 type Auth struct {
-	Lockout  Lockout  `koanf:"lockout"`
-	Argon2id Argon2id `koanf:"argon2id"`
-	Session  Session  `koanf:"session"`
-	Token    Token    `koanf:"token"`
-	MFA      MFA      `koanf:"mfa"`
-	Device   Device   `koanf:"device"`
-	FIDO2    FIDO2    `koanf:"fido2"`
+	Lockout   Lockout   `koanf:"lockout"`
+	Argon2id  Argon2id  `koanf:"argon2id"`
+	Session   Session   `koanf:"session"`
+	Token     Token     `koanf:"token"`
+	MFA       MFA       `koanf:"mfa"`
+	Device    Device    `koanf:"device"`
+	FIDO2     FIDO2     `koanf:"fido2"`
+	RateLimit RateLimit `koanf:"rate_limit"`
 }
 
 // Lockout configures credential lockout (FRD §16.1).
@@ -119,6 +121,11 @@ type Session struct {
 	ConcurrentPolicy  string        `koanf:"concurrent_policy"`
 	ConcurrentMax     int           `koanf:"concurrent_max"`
 	MFASessionWindow  time.Duration `koanf:"mfa_session_window"`
+
+	// ForcedChangeWindow is the validity of the restricted "force change
+	// session token" issued at login when a password change is required
+	// (FR-LOGIN-006 steps 1-2, BR-011).
+	ForcedChangeWindow time.Duration `koanf:"forced_change_window"`
 }
 
 // Token configures access/refresh token lifetimes and issuance (FRD §16.3).
@@ -128,6 +135,23 @@ type Token struct {
 	RefreshTTLMobile    time.Duration `koanf:"refresh_ttl_mobile"`
 	Issuer              string        `koanf:"issuer"`
 	RotationGraceWindow time.Duration `koanf:"rotation_grace_window"`
+
+	// RS256 access-token signing key (FR-SESSION-002). PrivateKeyPEM, when
+	// set, takes precedence (e.g. injected as a k8s Secret env value);
+	// otherwise PrivateKeyPath is read from disk (local dev — see `make
+	// dev-keys`). Kid is embedded in the JWT header and must match the key
+	// published in JWKS (JWKS publishing itself is a separate, later feature).
+	PrivateKeyPEM  string `koanf:"private_key_pem"`
+	PrivateKeyPath string `koanf:"private_key_path"`
+	Kid            string `koanf:"kid"`
+}
+
+// RateLimit configures the login rate limiter (FR-LOGIN-008).
+type RateLimit struct {
+	IPMaxAttempts       int           `koanf:"ip_max_attempts"`
+	IPWindow            time.Duration `koanf:"ip_window"`
+	IdentityMaxAttempts int           `koanf:"identity_max_attempts"`
+	IdentityWindow      time.Duration `koanf:"identity_window"`
 }
 
 // MFA configures OTP/TOTP/recovery-code behavior (FRD §16.5).
@@ -166,6 +190,16 @@ type Identity struct {
 	Addr string `koanf:"addr"`
 }
 
+// Kafka configures the outbox relay's producer (PRD §10.4 transactional
+// outbox). A single topic carries every domain event; consumers filter on
+// the JSON `event_type` field.
+type Kafka struct {
+	Brokers         []string      `koanf:"brokers"`
+	OutboxTopic     string        `koanf:"outbox_topic"`
+	PublishInterval time.Duration `koanf:"publish_interval"`
+	BatchSize       int           `koanf:"batch_size"`
+}
+
 func defaults() map[string]any {
 	return map[string]any{
 		"app.name":                   "araquanid",
@@ -191,42 +225,54 @@ func defaults() map[string]any {
 		"telemetry.sample_ratio":     1.0,
 
 		// Authentication Module (FRD §16). Durations use Go duration syntax.
-		"auth.lockout.threshold":               5,
-		"auth.lockout.window":                  "15m",
-		"auth.lockout.tier1_duration":          "30m",
-		"auth.lockout.tier2_duration":          "2h",
-		"auth.argon2id.time_cost":              3,
-		"auth.argon2id.memory_kb":              65536,
-		"auth.argon2id.parallelism":            4,
-		"auth.session.idle_timeout_web":        "15m",
-		"auth.session.idle_timeout_mobile":     "30m",
-		"auth.session.absolute_web":            "8h",
-		"auth.session.absolute_mobile":         "24h",
-		"auth.session.concurrent_policy":       "LIMIT_N",
-		"auth.session.concurrent_max":          5,
-		"auth.session.mfa_session_window":      "10m",
-		"auth.token.access_ttl":                "15m",
-		"auth.token.refresh_ttl_web":           "24h",
-		"auth.token.refresh_ttl_mobile":        "168h",
-		"auth.token.issuer":                    "https://auth.bank.com",
-		"auth.token.rotation_grace_window":     "5s",
-		"auth.mfa.otp_ttl":                     "5m",
-		"auth.mfa.otp_max_attempts":            3,
-		"auth.mfa.otp_resend_rate_limit":       3,
-		"auth.mfa.otp_resend_window":           "10m",
-		"auth.mfa.totp_window":                 1,
-		"auth.mfa.enrollment_window":           "5m",
-		"auth.mfa.recovery_code_count":         10,
-		"auth.mfa.recovery_code_low_threshold": 3,
-		"auth.device.trust_duration":           "720h",
-		"auth.device.fingerprint_version":      1,
-		"auth.fido2.rp_id":                     "bank.com",
-		"auth.fido2.rp_name":                   "Corporate Bank",
-		"auth.fido2.rp_origin":                 "https://portal.bank.com",
-		"auth.fido2.user_verification":         "preferred",
-		"auth.fido2.attestation":               "indirect",
-		"auth.fido2.challenge_ttl":             "5m",
-		"identity.addr":                        "",
+		"auth.lockout.threshold":                5,
+		"auth.lockout.window":                   "15m",
+		"auth.lockout.tier1_duration":           "30m",
+		"auth.lockout.tier2_duration":           "2h",
+		"auth.argon2id.time_cost":               3,
+		"auth.argon2id.memory_kb":               65536,
+		"auth.argon2id.parallelism":             4,
+		"auth.session.idle_timeout_web":         "15m",
+		"auth.session.idle_timeout_mobile":      "30m",
+		"auth.session.absolute_web":             "8h",
+		"auth.session.absolute_mobile":          "24h",
+		"auth.session.concurrent_policy":        "LIMIT_N",
+		"auth.session.concurrent_max":           5,
+		"auth.session.mfa_session_window":       "10m",
+		"auth.session.forced_change_window":     "5m",
+		"auth.token.access_ttl":                 "15m",
+		"auth.token.refresh_ttl_web":            "24h",
+		"auth.token.refresh_ttl_mobile":         "168h",
+		"auth.token.issuer":                     "https://auth.bank.com",
+		"auth.token.rotation_grace_window":      "5s",
+		"auth.token.private_key_path":           "configs/dev/jwt_private_key.pem",
+		"auth.token.kid":                        "dev-2026-01",
+		"auth.rate_limit.ip_max_attempts":       10,
+		"auth.rate_limit.ip_window":             "5m",
+		"auth.rate_limit.identity_max_attempts": 5,
+		"auth.rate_limit.identity_window":       "15m",
+		"auth.mfa.otp_ttl":                      "5m",
+		"auth.mfa.otp_max_attempts":             3,
+		"auth.mfa.otp_resend_rate_limit":        3,
+		"auth.mfa.otp_resend_window":            "10m",
+		"auth.mfa.totp_window":                  1,
+		"auth.mfa.enrollment_window":            "5m",
+		"auth.mfa.recovery_code_count":          10,
+		"auth.mfa.recovery_code_low_threshold":  3,
+		"auth.device.trust_duration":            "720h",
+		"auth.device.fingerprint_version":       1,
+		"auth.fido2.rp_id":                      "bank.com",
+		"auth.fido2.rp_name":                    "Corporate Bank",
+		"auth.fido2.rp_origin":                  "https://portal.bank.com",
+		"auth.fido2.user_verification":          "preferred",
+		"auth.fido2.attestation":                "indirect",
+		"auth.fido2.challenge_ttl":              "5m",
+		"identity.addr":                         "",
+
+		"kafka.brokers":          []string{"localhost:9092"},
+		"kafka.outbox_topic":     "araquanid.auth.events",
+		"kafka.publish_interval": "2s",
+		"kafka.batch_size":       100,
 	}
 }
 

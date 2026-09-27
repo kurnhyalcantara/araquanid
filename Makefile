@@ -24,11 +24,19 @@ LDFLAGS       := -s -w \
   -X main.buildCommit=$(COMMIT) \
   -X main.buildDate=$(DATE)
 
-.PHONY: build run test test-integration lint vet proto-update \
+.PHONY: build run test test-integration lint vet proto-update dev-keys \
         migrate-up migrate-down migrate-create docker-build compose-up compose-down compose-migrate tidy tools
 
 build:
 	go build -trimpath -ldflags="$(LDFLAGS)" -o bin/$(BINARY) ./cmd/server
+
+# Generates a local-dev-only RSA keypair for the login feature's access-token
+# signer (FR-SESSION-002). Never commit the output; auth.token.private_key_path
+# defaults to configs/dev/jwt_private_key.pem (gitignored). Production keys are
+# injected via ARAQUANID_AUTH__TOKEN__PRIVATE_KEY_PEM, not this file.
+dev-keys:
+	mkdir -p configs/dev
+	openssl genrsa -out configs/dev/jwt_private_key.pem 2048
 
 run:
 	go run ./cmd/server serve

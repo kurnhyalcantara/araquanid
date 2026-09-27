@@ -14,6 +14,28 @@ networks:
     external: true
 
 services:
+  # Single-node Redpanda: Kafka-API-compatible broker (no Zookeeper) backing
+  # the outbox relay (internal/platform/outbox) for local dev/smoke testing.
+  # Not part of the shared infernape platform — this is araquanid-only infra.
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    profiles: ["app"]
+    container_name: araquanid-redpanda
+    networks:
+      - koer-network
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "19092:9092"
+
   migrate:
     image: migrate/migrate:v4.18.1
     profiles: ["tools"]
@@ -44,6 +66,9 @@ services:
       ARAQUANID_POSTGRES__PASSWORD: ${ARAQUANID_POSTGRES__PASSWORD:?set ARAQUANID_POSTGRES__PASSWORD}
       ARAQUANID_POSTGRES__DATABASE: ${ARAQUANID_POSTGRES__DATABASE:-araquanid}
       ARAQUANID_REDIS__ADDR: ${ARAQUANID_REDIS__ADDR:-koer-redis:6379}
+      ARAQUANID_KAFKA__BROKERS: ${ARAQUANID_KAFKA__BROKERS:-redpanda:9092}
+    depends_on:
+      - redpanda
     ports:
       - "50051:50051"
       - "8081:8081"

@@ -11,6 +11,9 @@ coverage.html
 config/config.yaml
 config/config.local.yaml
 
+# Local-dev-only RSA keypair for the login feature's JWT signer (`make dev-keys`)
+configs/dev/*.pem
+
 # Compose env files (hold platform secrets — ARAQUANID_POSTGRES__PASSWORD, ARAQUANID_JWT__SECRET)
 .env
 deployments/.env

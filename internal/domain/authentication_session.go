@@ -80,13 +80,19 @@ const (
 	ReasonSecurityEvent    RevokeReason = "SECURITY_EVENT"
 	ReasonExpiredIdle      RevokeReason = "SESSION_EXPIRED_IDLE"
 	ReasonExpiredAbsolute  RevokeReason = "SESSION_EXPIRED_ABSOLUTE"
+
+	// ReasonConcurrentSessionLimit — the session was evicted to enforce the
+	// per-identity/client concurrent session policy (FR-LOGIN-012), either by
+	// a SINGLE-policy login or a LIMIT_N eviction of the oldest session.
+	ReasonConcurrentSessionLimit RevokeReason = "CONCURRENT_SESSION_LIMIT"
 )
 
 // IsManual reports whether r can be passed to Revoke.
 func (r RevokeReason) IsManual() bool {
 	switch r {
 	case ReasonUserLogout, ReasonAdminForceLogout, ReasonPasswordChanged,
-		ReasonPasswordReset, ReasonDeviceRevoked, ReasonSecurityEvent:
+		ReasonPasswordReset, ReasonDeviceRevoked, ReasonSecurityEvent,
+		ReasonConcurrentSessionLimit:
 		return true
 	}
 	return false

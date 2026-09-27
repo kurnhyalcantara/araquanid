@@ -42,6 +42,8 @@ linters:
               desc: usecase must not depend on the delivery layer
             - pkg: github.com/kurnhyalcantara/araquanid/internal/features/auth/delivery
               desc: usecase must not depend on the delivery layer
+            - pkg: github.com/kurnhyalcantara/araquanid/internal/features/login/delivery
+              desc: usecase must not depend on the delivery layer
             - pkg: google.golang.org/grpc
               desc: usecase must not depend on transport
             - pkg: github.com/jackc/pgx
