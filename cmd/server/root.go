@@ -20,7 +20,7 @@ var (
 var configPath string
 
 // Execute runs the CLI and converts a command error into a non-zero exit.
-func Execute() {
+func execute() {
 	if err := newRootCmd().Execute(); err != nil {
 		slog.Error("command failed", slog.String("error", err.Error()))
 		os.Exit(1)
