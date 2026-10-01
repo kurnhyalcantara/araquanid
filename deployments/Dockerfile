@@ -16,9 +16,11 @@ RUN CGO_ENABLED=0 go build -trimpath \
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /out/server /server
+# Default config values (no in-code defaults); ARAQUANID_ env vars override them.
+COPY --from=builder /src/config/config.yaml /etc/araquanid/config.yaml
 
 # gRPC, HTTP gateway, ops (metrics/health)
 EXPOSE 9090 8080 9100
 
 ENTRYPOINT ["/server"]
-CMD ["serve", "--config", ""]
+CMD ["serve", "--config", "/etc/araquanid/config.yaml"]

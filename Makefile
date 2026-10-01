@@ -1,6 +1,6 @@
 # Load local env vars (gitignored; see .env.example) so ARAQUANID_* vars set
-# there reach both `go run` and the migrate DSN below — the single source
-# of truth is the environment, not a yaml file.
+# there reach both `go run` and the migrate DSN below, overriding the
+# defaults in config/config.yaml.
 -include .env
 export
 

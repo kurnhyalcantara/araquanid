@@ -73,7 +73,7 @@ Ops endpoints on :9100: `/metrics`, `/healthz`, `/readyz`.
 
 ```
 cmd/server/       cobra CLI: serve (config → container → run) + version
-config/           config loader (defaults < ARAQUANID_* env; optional --config yaml overlay)
+config/           config loader + config.yaml defaults (yaml < ARAQUANID_* env)
 internal/
   domain/         shared, pure domain models and invariants (one file per feature)
   features/
@@ -97,14 +97,17 @@ consumed as a module dependency.
 
 ## Configuration
 
-Environment variables are the single source of truth: precedence is defaults
-(`config/config.go`) < environment. Convention: `ARAQUANID_` prefix, `__` for
-nesting — `ARAQUANID_POSTGRES__HOST=db` overrides `postgres.host`. Copy
+`config/config.yaml` is read first and holds every default value — there are no
+in-code defaults, and startup fails if a required key is missing or a yaml key
+is misspelled. Environment variables are layered on top, so env always wins:
+`ARAQUANID_` prefix, `__` for nesting — `ARAQUANID_POSTGRES__HOST=db` overrides
+`postgres.host`. Secrets (`postgres.password`, `redis.password`,
+`auth.token.private_key_pem`) are not in the yaml; set them via env. Copy
 `.env.example` to `.env` (gitignored, auto-loaded by `make`) for local dev.
 `Makefile`'s `migrate-up`/`migrate-down` read the same `ARAQUANID_POSTGRES__*`
-vars so migrations never drift from the app. A yaml file can still be layered
-in via `--config path.yaml` for local stacking, but it's optional and loaded
-before env, so env always wins.
+vars so migrations never drift from the app. Point `--config` at another file
+to use a different base (default `config/config.yaml`, relative to the working
+directory).
 
 ## Using this template for a new service
 

@@ -38,8 +38,8 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "",
-		"optional path to a yaml config file to layer under env vars (defaults + env are the source of truth)")
+	root.PersistentFlags().StringVar(&configPath, "config", "config/config.yaml",
+		"path to the yaml config file, read first; ARAQUANID_ env vars override it")
 
 	root.AddCommand(newServeCmd(), newVersionCmd())
 	return root

@@ -7,8 +7,8 @@
 coverage.out
 coverage.html
 
-# Local config overrides (never commit real config — use ARAQUANID_ env vars in production)
-config/config.yaml
+# Local config overrides. config/config.yaml is committed: it holds the default
+# values and no secrets — supply those via ARAQUANID_ env vars.
 config/config.local.yaml
 
 # Local-dev-only RSA keypair for the login feature's JWT signer (`make dev-keys`)

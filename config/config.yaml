@@ -1,0 +1,102 @@
+# Default configuration, read first by config.Load (see --config); there are
+# no in-code defaults. Environment variables override it: ARAQUANID_ prefix,
+# "__" separates nesting levels (ARAQUANID_POSTGRES__HOST -> postgres.host).
+# Secrets (postgres.password, redis.password, auth.token.private_key_pem) are
+# supplied via env only — never commit them here. Durations use Go duration
+# syntax.
+
+app:
+  name: araquanid
+  env: development # development | staging | production
+  version: dev
+
+server:
+  metrics_port: 9100
+  shutdown_timeout: 15s
+
+postgres:
+  host: localhost
+  port: 5432
+  user: araquanid
+  database: araquanid
+  ssl_mode: disable
+  max_conns: 10
+  min_conns: 2
+  max_conn_lifetime: 1h
+
+redis:
+  addr: localhost:6379
+  db: 0
+  cache_ttl: 5m
+
+log:
+  level: info # debug | info | warn | error
+  format: json # json | text
+
+telemetry:
+  enabled: false
+  otlp_endpoint: localhost:4317
+  sample_ratio: 1.0
+
+# Authentication Module (FRD §16).
+auth:
+  lockout:
+    threshold: 5
+    window: 15m
+    tier1_duration: 30m
+    tier2_duration: 2h
+  argon2id:
+    time_cost: 3
+    memory_kb: 65536
+    parallelism: 4
+  session:
+    idle_timeout_web: 15m
+    idle_timeout_mobile: 30m
+    absolute_web: 8h
+    absolute_mobile: 24h
+    concurrent_policy: LIMIT_N
+    concurrent_max: 5
+    mfa_session_window: 10m
+    forced_change_window: 5m
+  token:
+    access_ttl: 15m
+    refresh_ttl_web: 24h
+    refresh_ttl_mobile: 168h
+    issuer: https://auth.bank.com
+    rotation_grace_window: 5s
+    private_key_path: configs/dev/jwt_private_key.pem
+    kid: dev-2026-01
+  rate_limit:
+    ip_max_attempts: 10
+    ip_window: 5m
+    identity_max_attempts: 5
+    identity_window: 15m
+  mfa:
+    otp_ttl: 5m
+    otp_max_attempts: 3
+    otp_resend_rate_limit: 3
+    otp_resend_window: 10m
+    totp_window: 1
+    enrollment_window: 5m
+    recovery_code_count: 10
+    recovery_code_low_threshold: 3
+  device:
+    trust_duration: 720h
+    fingerprint_version: 1
+  fido2:
+    rp_id: bank.com
+    rp_name: Corporate Bank
+    rp_origin: https://portal.bank.com
+    user_verification: preferred
+    attestation: indirect
+    challenge_ttl: 5m
+
+identity:
+  addr: ""
+
+kafka:
+  brokers:
+    - localhost:9092
+  outbox_topic: araquanid.auth.events
+  publish_interval: 2s
+  batch_size: 100

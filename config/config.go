@@ -1,9 +1,9 @@
 // Package config loads application configuration with the precedence:
-// defaults < environment variables. Environment variables (ARAQUANID_ prefix,
-// "__" separates nesting levels, e.g. ARAQUANID_POSTGRES__MAX_CONNS overrides
-// postgres.max_conns) are the source of truth; see .env.example. A yaml file
-// is also supported via --config for local stacking, but is optional and
-// loaded before env so env still wins.
+// yaml file < environment variables. The yaml file (config/config.yaml by
+// default, see --config) is read first and carries every default value; there
+// are no in-code defaults. Environment variables (ARAQUANID_ prefix, "__"
+// separates nesting levels, e.g. ARAQUANID_POSTGRES__MAX_CONNS overrides
+// postgres.max_conns) are layered on top, so env still wins; see .env.example.
 package config
 
 import (
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -85,7 +85,7 @@ type Telemetry struct {
 }
 
 // Auth externalizes the Authentication Module parameters (FRD §16). All values
-// are configurable; defaults() carries the FRD-recommended defaults.
+// are configurable; config/config.yaml carries the FRD-recommended defaults.
 type Auth struct {
 	Lockout   Lockout   `koanf:"lockout"`
 	Argon2id  Argon2id  `koanf:"argon2id"`
@@ -200,95 +200,17 @@ type Kafka struct {
 	BatchSize       int           `koanf:"batch_size"`
 }
 
-func defaults() map[string]any {
-	return map[string]any{
-		"app.name":                   "araquanid",
-		"app.env":                    "development",
-		"app.version":                "dev",
-		"server.metrics_port":        9100,
-		"server.shutdown_timeout":    "15s",
-		"postgres.host":              "localhost",
-		"postgres.port":              5432,
-		"postgres.user":              "araquanid",
-		"postgres.database":          "araquanid",
-		"postgres.ssl_mode":          "disable",
-		"postgres.max_conns":         10,
-		"postgres.min_conns":         2,
-		"postgres.max_conn_lifetime": "1h",
-		"redis.addr":                 "localhost:6379",
-		"redis.db":                   0,
-		"redis.cache_ttl":            "5m",
-		"log.level":                  "info",
-		"log.format":                 "json",
-		"telemetry.enabled":          false,
-		"telemetry.otlp_endpoint":    "localhost:4317",
-		"telemetry.sample_ratio":     1.0,
-
-		// Authentication Module (FRD §16). Durations use Go duration syntax.
-		"auth.lockout.threshold":                5,
-		"auth.lockout.window":                   "15m",
-		"auth.lockout.tier1_duration":           "30m",
-		"auth.lockout.tier2_duration":           "2h",
-		"auth.argon2id.time_cost":               3,
-		"auth.argon2id.memory_kb":               65536,
-		"auth.argon2id.parallelism":             4,
-		"auth.session.idle_timeout_web":         "15m",
-		"auth.session.idle_timeout_mobile":      "30m",
-		"auth.session.absolute_web":             "8h",
-		"auth.session.absolute_mobile":          "24h",
-		"auth.session.concurrent_policy":        "LIMIT_N",
-		"auth.session.concurrent_max":           5,
-		"auth.session.mfa_session_window":       "10m",
-		"auth.session.forced_change_window":     "5m",
-		"auth.token.access_ttl":                 "15m",
-		"auth.token.refresh_ttl_web":            "24h",
-		"auth.token.refresh_ttl_mobile":         "168h",
-		"auth.token.issuer":                     "https://auth.bank.com",
-		"auth.token.rotation_grace_window":      "5s",
-		"auth.token.private_key_path":           "configs/dev/jwt_private_key.pem",
-		"auth.token.kid":                        "dev-2026-01",
-		"auth.rate_limit.ip_max_attempts":       10,
-		"auth.rate_limit.ip_window":             "5m",
-		"auth.rate_limit.identity_max_attempts": 5,
-		"auth.rate_limit.identity_window":       "15m",
-		"auth.mfa.otp_ttl":                      "5m",
-		"auth.mfa.otp_max_attempts":             3,
-		"auth.mfa.otp_resend_rate_limit":        3,
-		"auth.mfa.otp_resend_window":            "10m",
-		"auth.mfa.totp_window":                  1,
-		"auth.mfa.enrollment_window":            "5m",
-		"auth.mfa.recovery_code_count":          10,
-		"auth.mfa.recovery_code_low_threshold":  3,
-		"auth.device.trust_duration":            "720h",
-		"auth.device.fingerprint_version":       1,
-		"auth.fido2.rp_id":                      "bank.com",
-		"auth.fido2.rp_name":                    "Corporate Bank",
-		"auth.fido2.rp_origin":                  "https://portal.bank.com",
-		"auth.fido2.user_verification":          "preferred",
-		"auth.fido2.attestation":                "indirect",
-		"auth.fido2.challenge_ttl":              "5m",
-		"identity.addr":                         "",
-
-		"kafka.brokers":          []string{"localhost:9092"},
-		"kafka.outbox_topic":     "araquanid.auth.events",
-		"kafka.publish_interval": "2s",
-		"kafka.batch_size":       100,
-	}
-}
-
-// Load reads configuration from the given yaml path (optional) and the
-// environment, applies defaults, and validates the result.
+// Load reads configuration from the yaml file at path, layers the environment
+// on top, and validates the result. The file is required: there are no
+// in-code defaults.
 func Load(path string) (*Config, error) {
 	k := koanf.New(".")
 
-	if err := k.Load(confmap.Provider(defaults(), "."), nil); err != nil {
-		return nil, fmt.Errorf("config: load defaults: %w", err)
+	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
+		return nil, fmt.Errorf("config: load %s: %w", path, err)
 	}
-
-	if path != "" {
-		if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
-			return nil, fmt.Errorf("config: load %s: %w", path, err)
-		}
+	if err := checkUnknownKeys(k); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
 
 	envProvider := env.Provider(envPrefix, ".", func(s string) string {
@@ -310,9 +232,103 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// checkUnknownKeys rejects yaml keys that map to no Config field, so a typo
+// fails loudly instead of leaving the intended field at its zero value. It
+// runs before env is layered in: ARAQUANID_ vars that are not app config
+// (e.g. ARAQUANID_MIGRATE_DATABASE_URL) must not trip it.
+func checkUnknownKeys(k *koanf.Koanf) error {
+	var probe Config
+	return k.UnmarshalWithConf("", &probe, koanf.UnmarshalConf{
+		DecoderConfig: &mapstructure.DecoderConfig{
+			DecodeHook:       mapstructure.StringToTimeDurationHookFunc(),
+			WeaklyTypedInput: true,
+			ErrorUnused:      true,
+		},
+	})
+}
+
+// validate reports every required key that is unset. Without in-code defaults
+// a missing key would otherwise silently become a zero value (e.g. a zero
+// access-token TTL or Argon2id cost). Keys where zero or empty is meaningful
+// (redis.db, postgres.min_conns, auth.mfa.totp_window, identity.addr,
+// passwords, ...) are not listed.
 func (c *Config) validate() error {
-	if c.Postgres.Host == "" {
-		return fmt.Errorf("config: postgres.host is required (set ARAQUANID_POSTGRES__HOST)")
+	var missing []string
+	req := func(key string, ok bool) {
+		if !ok {
+			missing = append(missing, key)
+		}
+	}
+
+	req("app.name", c.App.Name != "")
+	req("app.env", c.App.Env != "")
+	req("server.metrics_port", c.Server.MetricsPort > 0)
+	req("server.shutdown_timeout", c.Server.ShutdownTimeout > 0)
+
+	req("postgres.host", c.Postgres.Host != "")
+	req("postgres.port", c.Postgres.Port > 0)
+	req("postgres.user", c.Postgres.User != "")
+	req("postgres.database", c.Postgres.Database != "")
+	req("postgres.ssl_mode", c.Postgres.SSLMode != "")
+	req("postgres.max_conns", c.Postgres.MaxConns > 0)
+	req("postgres.max_conn_lifetime", c.Postgres.MaxConnLifetime > 0)
+
+	req("redis.addr", c.Redis.Addr != "")
+	req("redis.cache_ttl", c.Redis.CacheTTL > 0)
+	req("log.level", c.Log.Level != "")
+	req("log.format", c.Log.Format != "")
+	req("telemetry.otlp_endpoint", !c.Telemetry.Enabled || c.Telemetry.OTLPEndpoint != "")
+
+	a := c.Auth
+	req("auth.lockout.threshold", a.Lockout.Threshold > 0)
+	req("auth.lockout.window", a.Lockout.Window > 0)
+	req("auth.lockout.tier1_duration", a.Lockout.Tier1Duration > 0)
+	req("auth.lockout.tier2_duration", a.Lockout.Tier2Duration > 0)
+	req("auth.argon2id.time_cost", a.Argon2id.TimeCost > 0)
+	req("auth.argon2id.memory_kb", a.Argon2id.MemoryKB > 0)
+	req("auth.argon2id.parallelism", a.Argon2id.Parallelism > 0)
+	req("auth.session.idle_timeout_web", a.Session.IdleTimeoutWeb > 0)
+	req("auth.session.idle_timeout_mobile", a.Session.IdleTimeoutMobile > 0)
+	req("auth.session.absolute_web", a.Session.AbsoluteWeb > 0)
+	req("auth.session.absolute_mobile", a.Session.AbsoluteMobile > 0)
+	req("auth.session.concurrent_policy", a.Session.ConcurrentPolicy != "")
+	req("auth.session.concurrent_max", a.Session.ConcurrentMax > 0)
+	req("auth.session.mfa_session_window", a.Session.MFASessionWindow > 0)
+	req("auth.session.forced_change_window", a.Session.ForcedChangeWindow > 0)
+	req("auth.token.access_ttl", a.Token.AccessTTL > 0)
+	req("auth.token.refresh_ttl_web", a.Token.RefreshTTLWeb > 0)
+	req("auth.token.refresh_ttl_mobile", a.Token.RefreshTTLMobile > 0)
+	req("auth.token.issuer", a.Token.Issuer != "")
+	req("auth.token.kid", a.Token.Kid != "")
+	req("auth.token.private_key_pem or auth.token.private_key_path",
+		a.Token.PrivateKeyPEM != "" || a.Token.PrivateKeyPath != "")
+	req("auth.rate_limit.ip_max_attempts", a.RateLimit.IPMaxAttempts > 0)
+	req("auth.rate_limit.ip_window", a.RateLimit.IPWindow > 0)
+	req("auth.rate_limit.identity_max_attempts", a.RateLimit.IdentityMaxAttempts > 0)
+	req("auth.rate_limit.identity_window", a.RateLimit.IdentityWindow > 0)
+	req("auth.mfa.otp_ttl", a.MFA.OTPTTL > 0)
+	req("auth.mfa.otp_max_attempts", a.MFA.OTPMaxAttempts > 0)
+	req("auth.mfa.otp_resend_rate_limit", a.MFA.OTPResendRateLimit > 0)
+	req("auth.mfa.otp_resend_window", a.MFA.OTPResendWindow > 0)
+	req("auth.mfa.enrollment_window", a.MFA.EnrollmentWindow > 0)
+	req("auth.mfa.recovery_code_count", a.MFA.RecoveryCodeCount > 0)
+	req("auth.device.trust_duration", a.Device.TrustDuration > 0)
+	req("auth.device.fingerprint_version", a.Device.FingerprintVersion > 0)
+	req("auth.fido2.rp_id", a.FIDO2.RPID != "")
+	req("auth.fido2.rp_name", a.FIDO2.RPName != "")
+	req("auth.fido2.rp_origin", a.FIDO2.RPOrigin != "")
+	req("auth.fido2.user_verification", a.FIDO2.UserVerification != "")
+	req("auth.fido2.attestation", a.FIDO2.Attestation != "")
+	req("auth.fido2.challenge_ttl", a.FIDO2.ChallengeTTL > 0)
+
+	req("kafka.brokers", len(c.Kafka.Brokers) > 0)
+	req("kafka.outbox_topic", c.Kafka.OutboxTopic != "")
+	req("kafka.publish_interval", c.Kafka.PublishInterval > 0)
+	req("kafka.batch_size", c.Kafka.BatchSize > 0)
+
+	if len(missing) > 0 {
+		return fmt.Errorf("config: required keys are unset or zero (set them in the yaml file or via %s env vars): %s",
+			envPrefix, strings.Join(missing, ", "))
 	}
 	return nil
 }
