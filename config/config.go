@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -179,17 +178,14 @@ func (p Postgres) DSN() string {
 		p.User, p.Password, p.Host, p.Port, p.Database, p.SSLMode)
 }
 
-// Identity configures the Identity Context anti-corruption client the auth
-// module dials to resolve identifiers and read display data.
-
+// Load reads configuration from the YAML file at the given path.
+// Environment variables (prefixed with envPrefix) override matching
+// values from the file when present.
 func Load(path string) (*Config, error) {
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
 		return nil, fmt.Errorf("config: load %s: %w", path, err)
-	}
-	if err := checkUnknownKeys(k); err != nil {
-		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
 
 	envProvider := env.Provider(envPrefix, ".", func(s string) string {
@@ -209,21 +205,6 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
-}
-
-// checkUnknownKeys rejects yaml keys that map to no Config field, so a typo
-// fails loudly instead of leaving the intended field at its zero value. It
-// runs before env is layered in: ARAQUANID_ vars that are not app config
-// (e.g. ARAQUANID_MIGRATE_DATABASE_URL) must not trip it.
-func checkUnknownKeys(k *koanf.Koanf) error {
-	var probe Config
-	return k.UnmarshalWithConf("", &probe, koanf.UnmarshalConf{
-		DecoderConfig: &mapstructure.DecoderConfig{
-			DecodeHook:       mapstructure.StringToTimeDurationHookFunc(),
-			WeaklyTypedInput: true,
-			ErrorUnused:      true,
-		},
-	})
 }
 
 // validate reports every required key that is unset.
