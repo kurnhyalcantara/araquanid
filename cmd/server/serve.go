@@ -43,13 +43,13 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	ep := service.Registry[service.Auth]
 
 	opsServer := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Server.MetricsPort),
+		Addr:              fmt.Sprintf(":%d", cfg.OpsServer.MetricsPort),
 		Handler:           opsMux(c),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
-		log.Info("ops server listening (metrics, health)", slog.Int("port", cfg.Server.MetricsPort))
+		log.Info("ops server listening (metrics, health)", slog.Int("port", cfg.OpsServer.MetricsPort))
 		if err := opsServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Error("ops server failed", slog.String("error", err.Error()))
 		}
@@ -60,7 +60,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 		GRPCAddr:        ep.GRPCListenAddr(),
 		GatewayHandler:  c.GatewayMux,
 		HTTPAddr:        ep.HTTPListenAddr(),
-		ShutdownTimeout: cfg.Server.ShutdownTimeout,
+		ShutdownTimeout: cfg.OpsServer.ShutdownTimeout,
 		Logger:          log,
 		OnShutdown: []func(context.Context) error{
 			opsServer.Shutdown,

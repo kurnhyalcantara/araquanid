@@ -89,6 +89,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		MaxConnLifetime: cfg.Postgres.MaxConnLifetime,
 	})
 	if err != nil {
+		_ = tel.Shutdown(ctx)
 		return nil, fmt.Errorf("container: %w", err)
 	}
 
@@ -98,6 +99,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		DB:       cfg.Redis.DB,
 	})
 	if err != nil {
+		_ = tel.Shutdown(ctx)
 		pg.Close()
 		return nil, fmt.Errorf("container: %w", err)
 	}
@@ -109,6 +111,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		Issuer:         cfg.Auth.Token.Issuer,
 	})
 	if err != nil {
+		_ = tel.Shutdown(ctx)
 		pg.Close()
 		_ = rdb.Close()
 		return nil, fmt.Errorf("container: %w", err)
@@ -127,6 +130,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 	}
 	clients, err := platgrpc.NewClients(clientsCfg)
 	if err != nil {
+		_ = tel.Shutdown(ctx)
 		pg.Close()
 		_ = rdb.Close()
 		return nil, fmt.Errorf("container: %w", err)

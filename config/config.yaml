@@ -10,7 +10,7 @@ app:
   env: development # development | staging | production
   version: dev
 
-server:
+ops_server:
   metrics_port: 9100
   shutdown_timeout: 15s
 
@@ -27,7 +27,7 @@ postgres:
 redis:
   addr: localhost:6379
   db: 0
-  cache_ttl: 5m
+  default_ttl: 5m
 
 log:
   level: info # debug | info | warn | error
