@@ -22,7 +22,6 @@ import (
 	"github.com/kurnhyalcantara/kingler/pkg/platform/logger"
 	"github.com/kurnhyalcantara/kingler/pkg/platform/postgres"
 	"github.com/kurnhyalcantara/kingler/pkg/platform/redis"
-	"github.com/kurnhyalcantara/kingler/pkg/platform/service"
 	"github.com/kurnhyalcantara/kingler/pkg/platform/telemetry"
 	platvalidator "github.com/kurnhyalcantara/kingler/pkg/platform/validator"
 
@@ -41,6 +40,7 @@ import (
 	"github.com/kurnhyalcantara/araquanid/internal/platform/outbox"
 	"github.com/kurnhyalcantara/araquanid/internal/platform/passwordhash"
 	"github.com/kurnhyalcantara/araquanid/internal/platform/ratelimit"
+	"github.com/kurnhyalcantara/araquanid/internal/platform/service"
 	"github.com/kurnhyalcantara/araquanid/internal/validator"
 )
 
@@ -55,7 +55,7 @@ type Container struct {
 	HealthServer *health.Server
 	GatewayMux   *runtime.ServeMux
 
-	clients     *platgrpc.Clients
+	clients     *service.Clients
 	kafkaWriter *kafkago.Writer
 	relayCancel context.CancelFunc
 }
@@ -117,18 +117,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("container: %w", err)
 	}
 
-	// Outbound gRPC clients: the gateway's loopback connection to this process's
-	// own server, plus the Identity Context (added only when its endpoint is
-	// configured). Ports come from the shared service catalog so the bind and
-	// dial sides cannot drift.
-	ep := service.Registry[service.Auth]
-	clientsCfg := platgrpc.ClientsConfig{
-		"loopback": {Target: ep.GRPCTarget("localhost")},
-	}
-	if cfg.Identity.Addr != "" {
-		clientsCfg["identity"] = platgrpc.ClientConfig{Target: cfg.Identity.Addr}
-	}
-	clients, err := platgrpc.NewClients(clientsCfg)
+	clients, err := service.NewClients(cfg)
 	if err != nil {
 		_ = tel.Shutdown(ctx)
 		pg.Close()
@@ -167,7 +156,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 
 	loginRepo := logindb.New(pg)
 	mfaSessions := loginredis.NewMFASessionStore(rdb)
-	identityACL := loginidentity.NewACL(clients.Get("identity"))
+	identityACL := loginidentity.NewACL(clients.Identity)
 	rateLimiter := ratelimit.New(rdb)
 
 	loginUC := loginusecase.New(loginusecase.Dependencies{
@@ -221,7 +210,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 	gatewayMux := platgrpc.NewGatewayMux(middleware.GatewayOptions()...)
-	gatewayConn := clients.Get("loopback")
+	gatewayConn := clients.Loopback
 	if err := loginrest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
 		relayCancel()
 		pg.Close()

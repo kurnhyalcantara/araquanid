@@ -8,11 +8,10 @@ import (
 	"errors"
 	"fmt"
 
-	"google.golang.org/grpc"
-
 	identityv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/identity/v1"
 
 	"github.com/kurnhyalcantara/araquanid/internal/features/login/repository"
+	"github.com/kurnhyalcantara/araquanid/internal/platform/service"
 )
 
 // ErrUnavailable is returned when the Identity Context client was never
@@ -21,17 +20,14 @@ import (
 var ErrUnavailable = errors.New("login/identity: identity context unavailable")
 
 type acl struct {
-	client identityv1.IdentityServiceClient
+	client service.IdentityClient
 }
 
-// NewACL builds a repository.IdentityACL over conn. conn may be nil (no
+// NewACL builds a repository.IdentityACL over client. client may be nil (no
 // Identity Context endpoint configured); every call then returns
 // ErrUnavailable instead of panicking.
-func NewACL(conn *grpc.ClientConn) repository.IdentityACL {
-	if conn == nil {
-		return &acl{}
-	}
-	return &acl{client: identityv1.NewIdentityServiceClient(conn)}
+func NewACL(client service.IdentityClient) repository.IdentityACL {
+	return &acl{client: client}
 }
 
 func (a *acl) ResolveIdentity(ctx context.Context, identifier, companyCode string) (*repository.ResolvedIdentity, bool, error) {

@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	platgrpc "github.com/kurnhyalcantara/kingler/pkg/platform/grpc"
+	server "github.com/kurnhyalcantara/kingler/pkg/platform/grpc"
 	"github.com/kurnhyalcantara/kingler/pkg/platform/service"
 
 	"github.com/kurnhyalcantara/araquanid/config"
@@ -39,8 +39,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 
-	log := c.Logger
-	ep := service.Registry[service.Auth]
+	authServ := service.Registry[service.Auth]
 
 	opsServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.OpsServer.MetricsPort),
@@ -49,19 +48,19 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	}
 
 	go func() {
-		log.Info("ops server listening (metrics, health)", slog.Int("port", cfg.OpsServer.MetricsPort))
+		c.Logger.Info("ops server listening (metrics, health)", slog.Int("port", cfg.OpsServer.MetricsPort))
 		if err := opsServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Error("ops server failed", slog.String("error", err.Error()))
+			c.Logger.Error("ops server failed", slog.String("error", err.Error()))
 		}
 	}()
 
-	return platgrpc.Run(ctx, platgrpc.RunnerConfig{
+	return server.Run(ctx, server.RunnerConfig{
 		GRPCServer:      c.GRPCServer,
-		GRPCAddr:        ep.GRPCListenAddr(),
+		GRPCAddr:        authServ.GRPCListenAddr(),
 		GatewayHandler:  c.GatewayMux,
-		HTTPAddr:        ep.HTTPListenAddr(),
+		HTTPAddr:        authServ.HTTPListenAddr(),
 		ShutdownTimeout: cfg.OpsServer.ShutdownTimeout,
-		Logger:          log,
+		Logger:          c.Logger,
 		OnShutdown: []func(context.Context) error{
 			opsServer.Shutdown,
 			c.Close,

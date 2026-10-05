@@ -8,7 +8,7 @@
 app:
   name: araquanid
   env: development # development | staging | production
-  version: dev
+  version: 0.1.0
 
 ops_server:
   metrics_port: 9100

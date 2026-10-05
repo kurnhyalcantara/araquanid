@@ -27,8 +27,8 @@ type (
 		Redis     Redis     `koanf:"redis"`
 		Log       Log       `koanf:"log"`
 		Telemetry Telemetry `koanf:"telemetry"`
+		Services  Services  `koanf:"services"`
 		Auth      Auth      `koanf:"auth"`
-		Identity  Identity  `koanf:"identity"`
 		Kafka     Kafka     `koanf:"kafka"`
 	}
 
@@ -71,6 +71,10 @@ type (
 		Enabled      bool    `koanf:"enabled"`
 		OTLPEndpoint string  `koanf:"otlp_endpoint"`
 		SampleRatio  float64 `koanf:"sample_ratio"`
+	}
+
+	Services struct {
+		Identity Identity `koanf:"identity"`
 	}
 
 	Identity struct {
