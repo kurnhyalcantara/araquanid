@@ -61,8 +61,17 @@ type Container struct {
 }
 
 // Build constructs the full application graph.
-func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
-	log := logger.New(logger.Config{
+func Build(ctx context.Context, cfg *config.Config) (con *Container, err error) {
+	con = &Container{Config: cfg}
+
+	defer func() {
+		if err != nil {
+			_ = con.Close(ctx)
+			con = nil
+		}
+	}()
+
+	con.Logger = logger.New(logger.Config{
 		Level:   cfg.Log.Level,
 		Format:  cfg.Log.Format,
 		Name:    cfg.App.Name,
@@ -70,7 +79,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		Env:     cfg.App.Env,
 	})
 
-	tel, err := telemetry.New(ctx, telemetry.Config{
+	con.Telemetry, err = telemetry.New(ctx, telemetry.Config{
 		Name:         cfg.App.Name,
 		Version:      cfg.App.Version,
 		Env:          cfg.App.Env,
@@ -79,29 +88,29 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		SampleRatio:  cfg.Telemetry.SampleRatio,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("container: %w", err)
+		err = fmt.Errorf("failed init telemetry: %w", err)
+		return
 	}
 
-	pg, err := postgres.New(ctx, postgres.Config{
+	con.Postgres, err = postgres.New(ctx, postgres.Config{
 		DSN:             cfg.Postgres.DSN(),
 		MaxConns:        cfg.Postgres.MaxConns,
 		MinConns:        cfg.Postgres.MinConns,
 		MaxConnLifetime: cfg.Postgres.MaxConnLifetime,
 	})
 	if err != nil {
-		_ = tel.Shutdown(ctx)
-		return nil, fmt.Errorf("container: %w", err)
+		err = fmt.Errorf("failed init postgres: %w", err)
+		return
 	}
 
-	rdb, err := redis.New(ctx, redis.Config{
+	con.Redis, err = redis.New(ctx, redis.Config{
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
 	if err != nil {
-		_ = tel.Shutdown(ctx)
-		pg.Close()
-		return nil, fmt.Errorf("container: %w", err)
+		err = fmt.Errorf("failed init redis: %w", err)
+		return
 	}
 
 	signer, err := jwtsign.NewSigner(jwtsign.Config{
@@ -111,47 +120,44 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		Issuer:         cfg.Auth.Token.Issuer,
 	})
 	if err != nil {
-		_ = tel.Shutdown(ctx)
-		pg.Close()
-		_ = rdb.Close()
-		return nil, fmt.Errorf("container: %w", err)
+		err = fmt.Errorf("failed init jwt signer: %w", err)
+		return
 	}
 
-	clients, err := services.InitGrpcConns(cfg)
+	con.clients, err = services.InitGrpcConns(cfg)
 	if err != nil {
-		_ = tel.Shutdown(ctx)
-		pg.Close()
-		_ = rdb.Close()
-		return nil, fmt.Errorf("container: %w", err)
+		err = fmt.Errorf("failed init grpc services: %w", err)
+		return
 	}
 
-	kafkaWriter := &kafkago.Writer{
+	con.kafkaWriter = &kafkago.Writer{
 		Addr:     kafkago.TCP(cfg.Kafka.Brokers...),
 		Topic:    cfg.Kafka.OutboxTopic,
 		Balancer: &kafkago.LeastBytes{},
 	}
 	relayCtx, relayCancel := context.WithCancel(context.Background())
-	relay := outbox.NewRelay(pg, kafkaWriter, outbox.RelayConfig{
+	con.relayCancel = relayCancel
+	relay := outbox.NewRelay(con.Postgres, con.kafkaWriter, outbox.RelayConfig{
 		PollInterval: cfg.Kafka.PublishInterval,
 		BatchSize:    cfg.Kafka.BatchSize,
-	}, log)
+	}, con.Logger)
 	go func() {
 		if err := relay.Run(relayCtx); err != nil && !errors.Is(err, context.Canceled) {
-			log.Error("outbox relay stopped", slog.String("error", err.Error()))
+			con.Logger.Error("outbox relay stopped", slog.String("error", err.Error()))
 		}
 	}()
 
-	grpcServer, healthServer := platgrpc.NewServer(
+	con.GRPCServer, con.HealthServer = platgrpc.NewServer(
 		platmiddleware.RequestID(),
-		platmiddleware.Recovery(log),
-		platmiddleware.Logging(log),
+		platmiddleware.Recovery(con.Logger),
+		platmiddleware.Logging(con.Logger),
 		middleware.AppError(),
 	)
 
-	loginRepo := logindb.New(pg)
-	mfaSessions := loginredis.NewMFASessionStore(rdb)
-	identityACL := loginidentity.NewACL(clients.Identity)
-	rateLimiter := ratelimit.New(rdb)
+	loginRepo := logindb.New(con.Postgres)
+	mfaSessions := loginredis.NewMFASessionStore(con.Redis)
+	identityACL := loginidentity.NewACL(con.clients.Identity)
+	rateLimiter := ratelimit.New(con.Redis)
 
 	loginUC := loginusecase.New(loginusecase.Dependencies{
 		UnitOfWork:      loginRepo,
@@ -163,7 +169,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		MFASessionStore: mfaSessions,
 		RateLimiter:     rateLimiter,
 		TokenSigner:     signer,
-		Logger:          log,
+		Logger:          con.Logger,
 		Config: loginusecase.Config{
 			Lockout: domain.LockoutPolicy{
 				Threshold:          cfg.Auth.Lockout.Threshold,
@@ -200,33 +206,17 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 	val := validator.New(baseValidator)
 	loginHandler := logingrpc.NewHandler(loginUC, val)
 
-	authv1.RegisterAuthServiceServer(grpcServer, loginHandler)
-	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	authv1.RegisterAuthServiceServer(con.GRPCServer, loginHandler)
+	con.HealthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
-	gatewayMux := platgrpc.NewGatewayMux(middleware.GatewayOptions()...)
-	gatewayConn := clients.Loopback
-	if err := loginrest.RegisterREST(ctx, gatewayMux, gatewayConn); err != nil {
-		relayCancel()
-		pg.Close()
-		_ = rdb.Close()
-		_ = clients.Close()
-		_ = kafkaWriter.Close()
-		return nil, fmt.Errorf("container: register login REST gateway: %w", err)
+	con.GatewayMux = platgrpc.NewGatewayMux(middleware.GatewayOptions()...)
+	err = loginrest.RegisterREST(ctx, con.GatewayMux, con.clients.Loopback)
+	if err != nil {
+		err = fmt.Errorf("failed init login REST gateway: %w", err)
+		return
 	}
 
-	return &Container{
-		Config:       cfg,
-		Logger:       log,
-		Postgres:     pg,
-		Redis:        rdb,
-		Telemetry:    tel,
-		GRPCServer:   grpcServer,
-		HealthServer: healthServer,
-		GatewayMux:   gatewayMux,
-		clients:      clients,
-		kafkaWriter:  kafkaWriter,
-		relayCancel:  relayCancel,
-	}, nil
+	return
 }
 
 // Ready reports whether downstream dependencies are reachable; it backs the
@@ -242,15 +232,27 @@ func (c *Container) Ready(ctx context.Context) error {
 }
 
 // Close releases resources in reverse dependency order. The gRPC server
-// must already be stopped by the caller.
+// must already be stopped by the caller. It is safe to call on a partially
+// built Container.
 func (c *Container) Close(ctx context.Context) error {
-	c.relayCancel()
-	errs := []error{
-		c.clients.Close(),
-		c.Redis.Close(),
-		c.kafkaWriter.Close(),
-		c.Telemetry.Shutdown(ctx),
+	var errs []error
+	if c.relayCancel != nil {
+		c.relayCancel()
 	}
-	c.Postgres.Close()
+	if c.clients != nil {
+		errs = append(errs, c.clients.Close())
+	}
+	if c.kafkaWriter != nil {
+		errs = append(errs, c.kafkaWriter.Close())
+	}
+	if c.Redis != nil {
+		errs = append(errs, c.Redis.Close())
+	}
+	if c.Postgres != nil {
+		c.Postgres.Close()
+	}
+	if c.Telemetry != nil {
+		errs = append(errs, c.Telemetry.Shutdown(ctx))
+	}
 	return errors.Join(errs...)
 }
