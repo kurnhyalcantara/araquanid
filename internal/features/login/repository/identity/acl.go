@@ -11,7 +11,6 @@ import (
 	identityv1 "github.com/kurnhyalcantara/probopass/gen/go/probopass/identity/v1"
 
 	"github.com/kurnhyalcantara/araquanid/internal/features/login/repository"
-	"github.com/kurnhyalcantara/araquanid/internal/platform/service"
 )
 
 // ErrUnavailable is returned when the Identity Context client was never
@@ -20,13 +19,13 @@ import (
 var ErrUnavailable = errors.New("login/identity: identity context unavailable")
 
 type acl struct {
-	client service.IdentityClient
+	client identityv1.IdentityServiceClient
 }
 
 // NewACL builds a repository.IdentityACL over client. client may be nil (no
 // Identity Context endpoint configured); every call then returns
 // ErrUnavailable instead of panicking.
-func NewACL(client service.IdentityClient) repository.IdentityACL {
+func NewACL(client identityv1.IdentityServiceClient) repository.IdentityACL {
 	return &acl{client: client}
 }
 

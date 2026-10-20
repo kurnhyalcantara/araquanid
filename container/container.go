@@ -40,7 +40,7 @@ import (
 	"github.com/kurnhyalcantara/araquanid/internal/platform/outbox"
 	"github.com/kurnhyalcantara/araquanid/internal/platform/passwordhash"
 	"github.com/kurnhyalcantara/araquanid/internal/platform/ratelimit"
-	"github.com/kurnhyalcantara/araquanid/internal/platform/service"
+	"github.com/kurnhyalcantara/araquanid/internal/platform/services"
 	"github.com/kurnhyalcantara/araquanid/internal/validator"
 )
 
@@ -55,7 +55,7 @@ type Container struct {
 	HealthServer *health.Server
 	GatewayMux   *runtime.ServeMux
 
-	clients     *service.Clients
+	clients     *services.GrpcServices
 	kafkaWriter *kafkago.Writer
 	relayCancel context.CancelFunc
 }
@@ -117,7 +117,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("container: %w", err)
 	}
 
-	clients, err := service.NewClients(cfg)
+	clients, err := services.InitGrpcConns(cfg)
 	if err != nil {
 		_ = tel.Shutdown(ctx)
 		pg.Close()
@@ -125,8 +125,6 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("container: %w", err)
 	}
 
-	// Outbox relay: publishes transactionally-written domain events (PRD
-	// §10.4) to Kafka in the background; stopped via relayCancel in Close.
 	kafkaWriter := &kafkago.Writer{
 		Addr:     kafkago.TCP(cfg.Kafka.Brokers...),
 		Topic:    cfg.Kafka.OutboxTopic,
@@ -143,10 +141,6 @@ func Build(ctx context.Context, cfg *config.Config) (*Container, error) {
 		}
 	}()
 
-	// Interceptor chain, outermost first. AppError/GatewayOptions are
-	// araquanid's own (internal/middleware), not kingler's — the PRD's error
-	// envelope (HTTP 200 for business errors, top-level code/code_client) is
-	// the app-wide standard from here on, not a login-only exception.
 	grpcServer, healthServer := platgrpc.NewServer(
 		platmiddleware.RequestID(),
 		platmiddleware.Recovery(log),
