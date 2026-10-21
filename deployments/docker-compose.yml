@@ -42,7 +42,7 @@ services:
     networks:
       - koer-network
     volumes:
-      - ../migrations:/migrations:ro
+      - ./migrations:/migrations:ro
     command:
       # The password is embedded in this URL. If ARAQUANID_POSTGRES__PASSWORD
       # contains reserved characters (e.g. '@'), set ARAQUANID_MIGRATE_DATABASE_URL
@@ -55,7 +55,7 @@ services:
     profiles: ["app"]
     container_name: araquanid
     build:
-      context: ..
+      context: .
       dockerfile: deployments/Dockerfile
     networks:
       - koer-network
@@ -67,6 +67,10 @@ services:
       ARAQUANID_POSTGRES__DATABASE: ${ARAQUANID_POSTGRES__DATABASE:-araquanid}
       ARAQUANID_REDIS__ADDR: ${ARAQUANID_REDIS__ADDR:-koer-redis:6379}
       ARAQUANID_KAFKA__BROKERS: ${ARAQUANID_KAFKA__BROKERS:-redpanda:9092}
+      ARAQUANID_AUTH__TOKEN__PRIVATE_KEY_PATH: /run/secrets/jwt_private_key.pem
+    volumes:
+      # Dev signing key (gitignored); generate it locally, never bake it into the image.
+      - ./configs/dev/jwt_private_key.pem:/run/secrets/jwt_private_key.pem:ro
     depends_on:
       - redpanda
     ports:

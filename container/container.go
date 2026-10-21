@@ -130,17 +130,20 @@ func Build(ctx context.Context, cfg *config.Config) (con *Container, err error) 
 		return
 	}
 
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	con.relayCancel = relayCancel
+
 	con.kafkaWriter = &kafkago.Writer{
 		Addr:     kafkago.TCP(cfg.Kafka.Brokers...),
 		Topic:    cfg.Kafka.OutboxTopic,
 		Balancer: &kafkago.LeastBytes{},
 	}
-	relayCtx, relayCancel := context.WithCancel(context.Background())
-	con.relayCancel = relayCancel
+
 	relay := outbox.NewRelay(con.Postgres, con.kafkaWriter, outbox.RelayConfig{
 		PollInterval: cfg.Kafka.PublishInterval,
 		BatchSize:    cfg.Kafka.BatchSize,
 	}, con.Logger)
+
 	go func() {
 		if err := relay.Run(relayCtx); err != nil && !errors.Is(err, context.Canceled) {
 			con.Logger.Error("outbox relay stopped", slog.String("error", err.Error()))

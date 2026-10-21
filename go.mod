@@ -12,8 +12,8 @@ require (
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.5
-	github.com/kurnhyalcantara/kingler v0.1.2-beta.1
-	github.com/kurnhyalcantara/probopass v0.0.0-20260701092434-11d9d906c63f
+	github.com/kurnhyalcantara/kingler v0.1.3-beta.3
+	github.com/kurnhyalcantara/probopass v0.1.0-beta.1
 	github.com/redis/go-redis/v9 v9.20.1
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/spf13/cobra v1.10.2
@@ -73,7 +73,3 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
-
-replace github.com/kurnhyalcantara/probopass => ../probopass
-
-replace github.com/kurnhyalcantara/kingler => ../kingler
