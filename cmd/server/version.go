@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newVersionCmd prints build metadata stamped in at link time.
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",

@@ -17,7 +17,6 @@ import (
 	"github.com/kurnhyalcantara/araquanid/container"
 )
 
-// newServeCmd builds the command that runs the service.
 func newServeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "serve",
